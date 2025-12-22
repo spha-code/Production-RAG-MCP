@@ -6,6 +6,7 @@ from pydantic import BaseModel   # <-- validates JSON automatically
 import chromadb
 from sentence_transformers import SentenceTransformer
 
+#Pydantic’s validator: we subclass it to say “JSON must look like this”.
 
 class ChatRequest(BaseModel):
     query: str

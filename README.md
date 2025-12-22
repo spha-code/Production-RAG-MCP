@@ -9,6 +9,7 @@ Repo on github: https://github.com/spha-code/Production-RAG-MCP
 
 ### Project Structure:
 
+```
 Production-RAG-MCP/
 ├── backend/                 # Python service + ML + MCP
 │   ├── app.py               # FastAPI entry: /chat + /mcp routes
@@ -46,11 +47,13 @@ Production-RAG-MCP/
 ├── pyproject.toml
 ├── uv.lock
 └── README.md
+```
 
-on root directory:
-mkdir bakcend
-cd backend
-touch app.py
+On root directory:
+
+```mkdir bakcend```
+```cd backend```
+```touch app.py```
 
 ### backend/app.py
 
@@ -125,5 +128,13 @@ if __name__ == "__main__":
 
 
 ```uv run python app.py```
+```uv run python backend/app.py```
 
 http://127.0.0.1:8000/docs
+
+in root directory:
+
+```mkdir web```
+```touch web/demo.html```
+
+```demo.html```
