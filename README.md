@@ -10,35 +10,47 @@
 
 ```
 Production-RAG-MCP/
-├── backend/                     # Python service + ML + MCP
-│   ├── app.py                   # FastAPI entry: mounts routers
-│   ├── routes/                  # new
+├── backend/                         # Python service + ML + MCP
+│   ├── app.py                       # FastAPI entry: mounts routers
+│   ├── config.py                    # env-based settings
+│   ├── logging_config.py            # structured json logs
+│   ├── telemetry.py                 # OTel + Prometheus
+│   ├── exceptions.py                # custom HTTP handlers
+│   ├── gunicorn_conf.py             # prod ASGI runner config
+│   ├── routes/                      # API endpoints
 │   │   ├── __init__.py
-│   │   └── upload.py            # /upload endpoint
+│   │   └── upload.py                # /upload endpoint
+│   ├── middleware/
+│   │   ├── __init__.py
+│   │   └── auth.py                  # JWT / API-key guard
 │   ├── rag/
 │   │   ├── __init__.py
-│   │   ├── retriever.py         # Chroma & sentence-transformers
-│   │   └── schemas.py           # Pydantic models
+│   │   ├── retriever.py             # Chroma & sentence-transformers
+│   │   └── schemas.py               # Pydantic models
 │   ├── mcp/
 │   │   ├── __init__.py
-│   │   └── tools.py             # MCP tool descriptor + handler
+│   │   └── tools.py                 # MCP tool descriptor + handler
 │   ├── tests/
 │   │   ├── __init__.py
 │   │   └── test_app.py
+│   ├── alembic/                     # DB migrations (if Postgres added)
+│   │   └── versions/
 │   ├── requirements-lock.txt
+│   ├── requirements-dev.txt         # dev-only deps
+│   ├── .env.example                 # template env vars
 │   └── Dockerfile
-├── web/                         # Next.js site & embeddable widget
+├── web/                             # Next.js site & embeddable widget
 │   ├── pages/
 │   ├── components/
 │   │   └── ChatWidget.tsx
 │   ├── public/
 │   ├── styles/
 │   └── package.json
-├── ios/                         # SwiftUI Xcode project
+├── ios/                             # SwiftUI Xcode project
 │   └── ProductionRAG/
-├── android/                     # Kotlin Android-Studio project
+├── android/                         # Kotlin Android-Studio project
 │   └── app/
-├── iac/                         # AWS SAM infra
+├── iac/                             # AWS SAM infra
 │   └── template.yaml
 ├── .github/
 │   └── workflows/
@@ -46,9 +58,14 @@ Production-RAG-MCP/
 ├── scripts/
 │   ├── build.sh
 │   └── deploy.sh
+├── docker-compose.yml               # local dev stack
 ├── pyproject.toml
 ├── uv.lock
-└── README.md
+├── LICENSE
+├── CHANGELOG.md
+├── SECURITY.md
+├── README.md
+└── .env                             # ignored;
 ```
 
 On root directory:
