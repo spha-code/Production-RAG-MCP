@@ -3,18 +3,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware 
 from pydantic import BaseModel   # <-- validates JSON automatically
+from rag.schemas import ChatRequest, ChatResponse
 import chromadb
 from sentence_transformers import SentenceTransformer
-
-#Pydantic’s validator: we subclass it to say “JSON must look like this”.
-
-class ChatRequest(BaseModel):
-    query: str
-    k: int = 3          # top-k chunks to return
-
-class ChatResponse(BaseModel):
-    chunks: list[str]
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
