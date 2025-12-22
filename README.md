@@ -39,6 +39,23 @@ Production-RAG-MCP/
 │   ├── requirements-dev.txt         # dev-only deps
 │   ├── .env.example                 # template env vars
 │   └── Dockerfile
+├── mlops/                           # MLOps pipelines & monitoring
+│   ├── data/                        # raw / labelled datasets
+│   ├── notebooks/                   # EDA & embedding quality checks
+│   ├── pipelines/
+│   │   ├── embed_validation.py      # offline eval job
+│   │   └── retrain_trigger.py       # scheduled / event retraining
+│   ├── features/
+│   │   └── chunker.py               # shared text-split logic
+│   ├── monitoring/
+│   │   ├── data_drift.py            # detect embedding drift
+│   │   └── answer_quality.py        # LLM-as-judge scoring
+│   ├── configs/
+│   │   └── embed_config.yaml        # model, chunk size, overlap
+│   ├── tests/
+│   │   └── test_pipelines.py
+│   ├── Dockerfile.pipeline          # Airflow / Prefect runner image
+│   └── README.md                    # usage docs
 ├── web/                             # Next.js site & embeddable widget
 │   ├── pages/
 │   ├── components/
@@ -65,7 +82,7 @@ Production-RAG-MCP/
 ├── CHANGELOG.md
 ├── SECURITY.md
 ├── README.md
-└── .env                             # ignored;
+└── .env                             # ignored
 ```
 
 On root directory:
