@@ -1,10 +1,9 @@
-Repo on github: https://github.com/spha-code/Production-RAG-MCP
+#### Clone empty repo from github:
 
 ```git clone https://github.com/spha-code/Production-RAG-MCP``` locally
 
-```cd Production-RAG-MCP```
-```uv init```
-
+```cd Production-RAG-MCP``` -->
+```uv init``` -->
 ```uv add fastapi uvicorn sentence-transformers chromadb```
 
 ### Project Structure:
@@ -51,8 +50,8 @@ Production-RAG-MCP/
 
 On root directory:
 
-```mkdir bakcend```
-```cd backend```
+```mkdir bakcend``` -->
+```cd backend``` -->
 ```touch app.py```
 
 ### backend/app.py
