@@ -136,7 +136,7 @@ in root directory:
 ```mkdir web```
 ```touch web/demo.html```
 
-```demo.html```
+### demo.html 
 
 ```
 <!-- web/demo.html -->
