@@ -10,32 +10,35 @@
 
 ```
 Production-RAG-MCP/
-├── backend/                 # Python service + ML + MCP
-│   ├── app.py               # FastAPI entry: /chat + /mcp routes
+├── backend/                     # Python service + ML + MCP
+│   ├── app.py                   # FastAPI entry: mounts routers
+│   ├── routes/                  # new
+│   │   ├── __init__.py
+│   │   └── upload.py            # /upload endpoint
 │   ├── rag/
 │   │   ├── __init__.py
-│   │   ├── retriever.py     # Chroma & sentence-transformers
-│   │   └── schemas.py       # Pydantic models
+│   │   ├── retriever.py         # Chroma & sentence-transformers
+│   │   └── schemas.py           # Pydantic models
 │   ├── mcp/
 │   │   ├── __init__.py
-│   │   └── tools.py         # MCP tool descriptor + handler
+│   │   └── tools.py             # MCP tool descriptor + handler
 │   ├── tests/
 │   │   ├── __init__.py
 │   │   └── test_app.py
 │   ├── requirements-lock.txt
 │   └── Dockerfile
-├── web/                     # Next.js site & embeddable widget
+├── web/                         # Next.js site & embeddable widget
 │   ├── pages/
 │   ├── components/
 │   │   └── ChatWidget.tsx
 │   ├── public/
 │   ├── styles/
 │   └── package.json
-├── ios/                     # SwiftUI Xcode project
+├── ios/                         # SwiftUI Xcode project
 │   └── ProductionRAG/
-├── android/                 # Kotlin Android-Studio project
+├── android/                     # Kotlin Android-Studio project
 │   └── app/
-├── iac/                     # AWS SAM infra
+├── iac/                         # AWS SAM infra
 │   └── template.yaml
 ├── .github/
 │   └── workflows/
