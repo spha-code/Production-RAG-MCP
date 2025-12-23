@@ -1,22 +1,38 @@
 # backend/app.py
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware 
-from pydantic import BaseModel   # <-- validates JSON automatically
-from rag.schemas import ChatRequest, ChatResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import chromadb
 from sentence_transformers import SentenceTransformer
 
+# DEBUG: Import with error checking
+print("=== DEBUG: Starting app setup ===")
+try:
+    from routes.upload import router as upload_router
+    print(f"✅ Upload router imported: {upload_router}")
+    print(f"✅ Router routes: {[route.path for route in upload_router.routes]}")
+except Exception as e:
+    print(f"❌ Import error: {e}")
+    import traceback
+    traceback.print_exc()
+    upload_router = None
+
+class ChatRequest(BaseModel):
+    query: str
+    k: int = 3
+
+class ChatResponse(BaseModel):
+    chunks: list[str]
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 1× cold-start code
     app.state.encoder = SentenceTransformer("all-MiniLM-L6-v2")
     app.state.chroma = chromadb.PersistentClient(path="./chroma")
     try:
         app.state.collection = app.state.chroma.get_collection("docs")
     except Exception:
         app.state.collection = app.state.chroma.create_collection("docs")
-        # seed 3 tiny sentences so the demo never returns empty
         docs = [
             "GDPR applies to any company processing EU residents data.",
             "Paracetamol typical dose is 500-1000 mg.",
@@ -24,18 +40,28 @@ async def lifespan(app: FastAPI):
         ]
         embs = app.state.encoder.encode(docs).tolist()
         app.state.collection.add(documents=docs, ids=[f"id{i}" for i in range(len(docs))], embeddings=embs)
-    yield   # hands control to FastAPI
-    # (anything after yield runs on shutdown – we don’t need it yet)
-
+    yield
 
 app = FastAPI(title="ProductionRAG-MCP", version="0.1.0", lifespan=lifespan)
 
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:8080", "http://127.0.0.1:8080"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include upload router only if it imported successfully
+if upload_router:
+    app.include_router(upload_router, prefix="/upload", tags=["upload"])
+    print(f"✅ Upload router included with prefix: /upload")
+else:
+    print("❌ Upload router not included due to import error")
+
+# DEBUG: Check all routes
+print(f"✅ All app routes: {[route.path for route in app.routes]}")
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
@@ -59,7 +85,6 @@ async def mcp_tools():
             }
         }]
     }
-
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Production RAG - Document Intelligence Platform</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .app-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .app-header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .app-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .app-subtitle {
+            color: #666;
+            font-size: 1.1rem;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .upload-section,
+        .chat-section {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        /* Upload Area */
+        .upload-zone {
+            border: 3px dashed #ddd;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            background: #fafafa;
+            position: relative;
+        }
+
+        .upload-zone.dragover {
+            border-color: #667eea;
+            background: #f0f4ff;
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 64px;
+            color: #667eea;
+            margin-bottom: 16px;
+        }
+
+        .upload-text {
+            font-size: 1.2rem;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .upload-subtext {
+            color: #999;
+            font-size: 0.9rem;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .upload-controls {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f8f9fa;
+            color: #666;
+            border: 2px solid #ddd;
+        }
+
+        .btn-secondary:hover {
+            background: #e9ecef;
+        }
+
+        /* File List */
+        .file-list {
+            margin-top: 24px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 16px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            background: white;
+            transition: all 0.3s ease;
+        }
+
+        .file-item:hover {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .file-icon {
+            font-size: 24px;
+            margin-right: 12px;
+            color: #667eea;
+        }
+
+        .file-info {
+            flex: 1;
+        }
+
+        .file-name {
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .file-size {
+            color: #999;
+            font-size: 0.9rem;
+        }
+
+        .file-status {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-uploading {
+            background: #cce5ff;
+            color: #004085;
+        }
+
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            margin-top: 8px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #eee;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.3s ease;
+        }
+
+        /* Chat Interface */
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 500px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+
+        .message {
+            margin-bottom: 16px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message-user {
+            text-align: right;
+        }
+
+        .message-bot {
+            text-align: left;
+        }
+
+        .message-content {
+            display: inline-block;
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+
+        .message-user .message-content {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .message-bot .message-content {
+            background: white;
+            color: #333;
+            border: 1px solid #eee;
+        }
+
+        .chat-input-container {
+            display: flex;
+            gap: 12px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #eee;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        /* Document Management - FIXED URLS */
+        .doc-management {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            margin-top: 30px;
+        }
+
+        .doc-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .doc-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #eee;
+        }
+
+        .doc-info h4 {
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .doc-info p {
+            color: #999;
+            font-size: 0.9rem;
+        }
+
+        .doc-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 0.85rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 968px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+
+            .app-title {
+                font-size: 2rem;
+            }
+        }
+
+        /* Loading Animation */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <div class="app-header">
+            <h1 class="app-title">Production RAG</h1>
+            <p class="app-subtitle">Document Intelligence Platform - Upload, Search, and Analyze</p>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Upload Section -->
+            <div class="upload-section">
+                <h2 class="section-title">📁 Document Upload</h2>
+
+                <div class="upload-zone" id="uploadZone">
+                    <div class="upload-icon">📎</div>
+                    <div class="upload-text">Drop files here or click to browse</div>
+                    <div class="upload-subtext">Supports: PDF, DOCX, TXT, MD, CSV</div>
+
+                    <div class="upload-controls">
+                        <button class="btn btn-primary" onclick="selectFiles(event)">Choose Files</button>
+                        <button class="btn btn-secondary" onclick="selectFolder(event)">Choose Folder</button>
+                    </div>
+                </div>
+
+                <input type="file" id="fileInput" class="file-input" multiple accept=".txt,.md,.pdf,.docx,.csv">
+                <input type="file" id="folderInput" class="file-input" webkitdirectory directory multiple>
+
+                <div class="file-list" id="fileList"></div>
+            </div>
+
+            <!-- Chat Section -->
+            <div class="chat-section">
+                <h2 class="section-title">💬 Document Search</h2>
+
+                <div class="chat-container">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="message message-bot">
+                            <div class="message-content">
+                                Hello! Upload some documents and ask me anything about them.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chat-input-container">
+                        <input type="text" class="chat-input" id="chatInput" placeholder="Ask about your documents...">
+                        <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Document Management - FIXED TRIPLE UPLOAD URLs -->
+        <div class="doc-management">
+            <h2 class="section-title">📚 Document Library</h2>
+            <div class="doc-list" id="docList">
+                <div class="doc-item">
+                    <div class="doc-info">
+                        <h4>Loading documents...</h4>
+                        <p>Please wait while we load your document library</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8000';
+        let uploadQueue = [];
+        let isUploading = false;
+
+        // File selection functions
+        function selectFiles(event) {
+            event.stopPropagation();
+            document.getElementById('fileInput').click();
+        }
+
+        function selectFolder(event) {
+            event.stopPropagation();
+            document.getElementById('folderInput').click();
+        }
+
+        // Drag and Drop Setup
+        function setupDragAndDrop() {
+            const uploadZone = document.getElementById('uploadZone');
+
+            uploadZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadZone.classList.add('dragover');
+            });
+
+            uploadZone.addEventListener('dragleave', () => {
+                uploadZone.classList.remove('dragover');
+            });
+
+            uploadZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadZone.classList.remove('dragover');
+                handleFiles(e.dataTransfer.files);
+            });
+        }
+
+        // File Input Handlers
+        function setupFileInputs() {
+            document.getElementById('fileInput').addEventListener('change', (e) => {
+                handleFiles(e.target.files);
+            });
+
+            document.getElementById('folderInput').addEventListener('change', (e) => {
+                handleFiles(e.target.files, true);
+            });
+        }
+
+        // Handle Files
+        function handleFiles(files, isFolder = false) {
+            const fileArray = Array.from(files);
+            uploadQueue = [...uploadQueue, ...fileArray];
+            displayFileList();
+            processUploadQueue();
+        }
+
+        // Display File List
+        function displayFileList() {
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = '';
+
+            uploadQueue.forEach((file, index) => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.innerHTML = `
+                    <div class="file-icon">📄</div>
+                    <div class="file-info">
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-size">${formatFileSize(file.size)}</div>
+                    </div>
+                    <div class="file-status status-pending" id="status-${index}">
+                        Pending
+                    </div>
+                `;
+                fileList.appendChild(fileItem);
+            });
+        }
+
+        // Process Upload Queue - FIXED TRIPLE UPLOAD URLs
+        async function processUploadQueue() {
+            if (isUploading || uploadQueue.length === 0) return;
+
+            isUploading = true;
+
+            for (let i = 0; i < uploadQueue.length; i++) {
+                const file = uploadQueue[i];
+                const statusElement = document.getElementById(`status-${i}`);
+
+                statusElement.className = 'file-status status-uploading';
+                statusElement.textContent = 'Uploading...';
+
+                try {
+                    console.log(`Uploading to: ${API_BASE}/upload/upload/upload/`); // TRIPLE UPLOAD!
+
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('metadata', JSON.stringify({
+                        source: 'web_upload',
+                        originalName: file.name,
+                        uploadTime: new Date().toISOString()
+                    }));
+
+                    const response = await fetch(`${API_BASE}/upload/upload/upload/`, { // TRIPLE UPLOAD!
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const result = await response.json();
+                    console.log('Upload result:', result);
+
+                    if (response.ok) {
+                        statusElement.className = 'file-status status-success';
+                        statusElement.textContent = 'Success';
+                        addMessage(`Uploaded ${file.name} (${result.total_chunks} chunks)`, 'bot');
+                    } else {
+                        statusElement.className = 'file-status status-error';
+                        statusElement.textContent = `Error: ${result.detail || 'Unknown error'}`;
+                        addMessage(`Failed to upload ${file.name}`, 'bot');
+                    }
+                } catch (error) {
+                    console.error('Upload error:', error);
+                    statusElement.className = 'file-status status-error';
+                    statusElement.textContent = 'Network Error';
+                    addMessage(`Error uploading ${file.name}`, 'bot');
+                }
+            }
+
+            uploadQueue = [];
+            isUploading = false;
+            loadDocumentLibrary(); // Reload document list after upload
+        }
+
+        // DOCUMENT MANAGEMENT FUNCTIONS - FIXED TRIPLE UPLOAD URLs!
+        async function loadDocumentLibrary() {
+            try {
+                const response = await fetch(`${API_BASE}/upload/upload/documents`); // TRIPLE UPLOAD!
+                const data = await response.json();
+
+                const docList = document.getElementById('docList');
+                docList.innerHTML = '';
+
+                if (data.total_documents === 0) {
+                    docList.innerHTML = '<div class="doc-item"><div class="doc-info"><h4>No documents uploaded yet</h4><p>Upload some files to get started</p></div></div>';
+                    return;
+                }
+
+                data.documents.forEach(doc => {
+                    const docItem = document.createElement('div');
+                    docItem.className = 'doc-item';
+                    docItem.innerHTML = `
+                        <div class="doc-info">
+                            <h4>${doc.filename}</h4>
+                            <p>${doc.file_type} • ${formatFileSize(doc.file_size)} • ${doc.total_chunks} chunks</p>
+                            <p>Uploaded: ${new Date(doc.upload_time).toLocaleString()}</p>
+                        </div>
+                        <div class="doc-actions">
+                            <button class="btn btn-secondary btn-small" onclick="downloadDocument('${doc.document_id}')">Download</button>
+                            <button class="btn btn-secondary btn-small" onclick="deleteDocument('${doc.document_id}')">Delete</button>
+                        </div>
+                    `;
+                    docList.appendChild(docItem);
+                });
+            } catch (error) {
+                console.error('Failed to load documents:', error);
+                document.getElementById('docList').innerHTML = '<div class="doc-item"><div class="doc-info"><h4>Error loading documents</h4><p>Could not connect to server</p></div></div>';
+            }
+        }
+
+        async function downloadDocument(documentId) {
+            window.open(`${API_BASE}/upload/upload/documents/${documentId}/download`, '_blank'); // TRIPLE UPLOAD!
+        }
+
+        async function deleteDocument(documentId) {
+            if (confirm('Are you sure you want to delete this document?')) {
+                try {
+                    const response = await fetch(`${API_BASE}/upload/upload/documents/${documentId}`, { // TRIPLE UPLOAD!
+                        method: 'DELETE'
+                    });
+
+                    if (response.ok) {
+                        addMessage(`Document deleted successfully`, 'bot');
+                        loadDocumentLibrary(); // Reload the list
+                    } else {
+                        addMessage(`Failed to delete document`, 'bot');
+                    }
+                } catch (error) {
+                    addMessage(`Error deleting document`, 'bot');
+                }
+            }
+        }
+
+        // Chat Functions
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (!message) return;
+
+            addMessage(message, 'user');
+            input.value = '';
+
+            fetch(`${API_BASE}/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: message, k: 5 })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.chunks && data.chunks.length > 0) {
+                        const formattedResponse = data.chunks.map((chunk, i) =>
+                            `${i + 1}. ${chunk}`
+                        ).join('\n\n');
+                        addMessage(formattedResponse, 'bot');
+                    } else {
+                        addMessage('No relevant documents found.', 'bot');
+                    }
+                })
+                .catch(error => {
+                    addMessage('Error: Could not search documents.', 'bot');
+                });
+        }
+
+        function addMessage(text, sender) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message message-${sender}`;
+            messageDiv.innerHTML = `
+                <div class="message-content">${text.replace(/\n/g, '<br>')}</div>
+            `;
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Utility Functions
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function () {
+            setupDragAndDrop();
+            setupFileInputs();
+            loadDocumentLibrary(); // This loads the document management system!
+        });
+
+        // Enter key for chat
+        document.getElementById('chatInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+    </script>
+</body>
+
+</html>
