@@ -853,6 +853,10 @@ async def process_folder_with_progress(
 # Add to backend/app.py
 ```from .routes import upload```
 
+# Added Testing at backend/tests
+
+# Added CI/CD workflow
+
 # Add router registration
 ```app.include_router(upload.router)```
 
