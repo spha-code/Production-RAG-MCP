@@ -31,10 +31,16 @@ jobs:
           echo $! > .pidfile
           sleep 5                                      # give it time to bind
       
-      - name: Debug – show if server is up
+      - name: Debug – server boot check
         run: |
           sleep 3
+          echo "--- server.log ---"
+          cat server.log || echo "no log file"
+          echo "--- processes ---"
           ps aux | grep -E 'uvicorn|python.*app\.py' || true
+          echo "--- port listen ---"
+          netstat -tlnp 2>/dev/null | grep :8000 || ss -tlnp | grep :8000 || echo "port 8000 not open"
+          echo "--- health hit ---"
           curl -v http://127.0.0.1:8000/upload/test || true
 
       - name: Smoke-test upload + search
