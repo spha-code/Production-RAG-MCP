@@ -25,6 +25,8 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     chunks: list[str]
 
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.encoder = SentenceTransformer("all-MiniLM-L6-v2")

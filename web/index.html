@@ -563,7 +563,7 @@
                         uploadTime: new Date().toISOString()
                     }));
 
-                    const response = await fetch(`${API_BASE}/upload/upload/upload/`, { // TRIPLE UPLOAD!
+                    const response = await fetch(`${API_BASE}/upload/`, { // TRIPLE UPLOAD!
                         method: 'POST',
                         body: formData
                     });
@@ -596,7 +596,7 @@
         // DOCUMENT MANAGEMENT FUNCTIONS - FIXED TRIPLE UPLOAD URLs!
         async function loadDocumentLibrary() {
             try {
-                const response = await fetch(`${API_BASE}/upload/upload/documents`); // TRIPLE UPLOAD!
+                const response = await fetch(`${API_BASE}/upload/documents`); // TRIPLE UPLOAD!
                 const data = await response.json();
 
                 const docList = document.getElementById('docList');
@@ -636,7 +636,7 @@
         async function deleteDocument(documentId) {
             if (confirm('Are you sure you want to delete this document?')) {
                 try {
-                    const response = await fetch(`${API_BASE}/upload/upload/documents/${documentId}`, { // TRIPLE UPLOAD!
+                    const response = await fetch(`${API_BASE}/upload/documents/${documentId}`, { // TRIPLE UPLOAD!
                         method: 'DELETE'
                     });
 

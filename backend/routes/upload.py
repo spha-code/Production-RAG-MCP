@@ -19,7 +19,7 @@ from docx import Document
 import chardet
 import chromadb
 
-router = APIRouter(prefix="/upload", tags=["upload"])
+router = APIRouter(tags=["upload"])
 
 # Supported file extensions
 SUPPORTED_EXTENSIONS = {
@@ -163,9 +163,13 @@ def process_document(file_path: str, filename: str, file_type: str, chunk_size: 
         "total_chunks": len(chunks),
         "chunks": chunks
     }
+# temporary test
+@router.get("/test")          
+async def test_alive():
+    return {"status": "ok"}
 
 # Production document storage
-@router.post("/upload/")
+@router.post("/")
 async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
