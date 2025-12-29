@@ -1,6 +1,8 @@
 #### Run the repo:
 ``` uv run python backend/app.py```
+http://127.0.0.1:8000/docs#/
 
+```python -m http.server 8080```
 http://localhost:8080/web/index.html
 
 
