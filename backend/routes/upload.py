@@ -26,7 +26,7 @@ SUPPORTED_EXTENSIONS = {'.txt', '.md', '.pdf', '.docx', '.csv'}
 DOCUMENTS_DIR = "documents"
 os.makedirs(DOCUMENTS_DIR, exist_ok=True)
 
-documents_metadata = {}          # in-mem registry (survives restart via disk files)
+documents_metadata = {}          # in-mem registry (rebuilt from disk on start)
 
 # ------------------------------------------------------------------
 # text extractors
@@ -109,10 +109,10 @@ def process_document(file_path: str, filename: str, file_type: str,
     }
 
 # ------------------------------------------------------------------
-# Chroma helpers – *** the missing piece ***
+# Chroma helpers
 # ------------------------------------------------------------------
 def store_document_chunks(document_id: str, chunks: List[str], metadata: Dict[str, Any]):
-    from ..app import app          # relative import – works when started from repo root
+    from ..app import app
     ids  = [f"{document_id}_{i}" for i in range(len(chunks))]
     embs = app.state.encoder.encode(chunks).tolist()
     app.state.collection.upsert(
@@ -153,9 +153,10 @@ async def upload_document(
     file_type = ext[1:]        # remove dot
     result = process_document(str(original_path), file.filename, file_type, chunk_size, chunk_overlap)
 
+    # build metadata object
     doc_meta = {
         "document_id": doc_id,
-        "filename": file.filename,
+        "filename": file.filename,          # real human name
         "file_type": file_type,
         "file_size": len(content),
         "upload_time": datetime.utcnow().isoformat(),
@@ -165,6 +166,9 @@ async def upload_document(
         "custom_metadata": json.loads(metadata) if metadata else {}
     }
     documents_metadata[doc_id] = doc_meta
+
+    # save small side-car file for next restart
+    (doc_folder / "meta.json").write_text(json.dumps(doc_meta, indent=2))
 
     background_tasks.add_task(store_document_chunks, doc_id, result["chunks"], doc_meta)
 

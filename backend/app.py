@@ -5,6 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import chromadb
 from sentence_transformers import SentenceTransformer
+from datetime import datetime
+import pathlib
+import traceback
+import json
 
 # ---------- import upload router ----------
 print("=== DEBUG: Starting app setup ===")
@@ -52,8 +56,8 @@ async def lifespan(app: FastAPI):
         )
 
     # 3. re-index anything previously uploaded to ./documents/
-    import pathlib, traceback
     from routes.upload import process_document_sync      # relative import
+    from routes.upload import documents_metadata        # import once
 
     docs_path = pathlib.Path("documents")
     print(f"[lifespan] documents folder exists: {docs_path.exists()}")
@@ -88,8 +92,26 @@ async def lifespan(app: FastAPI):
                     ids=ids,
                     metadatas=[{"doc_id": doc_folder.name, "file": original_file.name}] * len(ids)
                 )
+
+                # 4. restore human-readable metadata
+                meta_file = doc_folder / "meta.json"
+                if meta_file.exists():
+                    meta = json.loads(meta_file.read_text())
+                else:
+                    # fallback for old uploads
+                    meta = {
+                        "document_id": doc_folder.name,
+                        "filename": original_file.name,
+                        "file_type": file_type,
+                        "file_size": original_file.stat().st_size,
+                        "upload_time": datetime.fromtimestamp(original_file.stat().st_mtime).isoformat(),
+                        "original_path": str(original_file),
+                        "total_chunks": len(result["chunks"]),
+                        "text_hash": result["text_hash"],
+                    }
+                documents_metadata[doc_folder.name] = meta
         except Exception as e:
-            print(f"[lifespan] failed on {doc_folder}: {e}")
+            print(f"[lifespan] FAILED on {doc_folder}: {e}")
             traceback.print_exc()
 
     yield   # FastAPI now serves requests
