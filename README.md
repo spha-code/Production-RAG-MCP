@@ -1,3 +1,9 @@
+#### Run the repo:
+``` uv run python backend/app.py```
+
+http://localhost:8080/web/index.html
+
+
 #### Clone empty repo from github:
 
 ```git clone https://github.com/spha-code/Production-RAG-MCP``` locally

@@ -112,8 +112,7 @@ def process_document(file_path: str, filename: str, file_type: str,
 # Chroma helpers – *** the missing piece ***
 # ------------------------------------------------------------------
 def store_document_chunks(document_id: str, chunks: List[str], metadata: Dict[str, Any]):
-    """Sync: write chunks into the running Chroma collection."""
-    from backend.app import app          # lifespan already initialised
+    from ..app import app          # relative import – works when started from repo root
     ids  = [f"{document_id}_{i}" for i in range(len(chunks))]
     embs = app.state.encoder.encode(chunks).tolist()
     app.state.collection.upsert(
@@ -124,7 +123,6 @@ def store_document_chunks(document_id: str, chunks: List[str], metadata: Dict[st
     )
 
 async def store_document_chunks_async(document_id: str, chunks: List[str], metadata: Dict[str, Any]):
-    """Async wrapper."""
     store_document_chunks(document_id, chunks, metadata)
 
 # ------------------------------------------------------------------

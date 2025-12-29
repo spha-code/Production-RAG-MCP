@@ -53,7 +53,8 @@ async def lifespan(app: FastAPI):
 
     # 3. re-index anything previously uploaded to ./documents/
     import pathlib
-    from backend.routes.upload import process_document_sync   # reusable helper
+    
+    from routes.upload import process_document_sync
 
     docs_path = pathlib.Path("documents")
     for doc_folder in docs_path.glob("*"):
