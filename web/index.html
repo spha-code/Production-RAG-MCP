@@ -553,7 +553,7 @@
                 statusElement.textContent = 'Uploading...';
 
                 try {
-                    console.log(`Uploading to: ${API_BASE}/upload/upload/upload/`); // TRIPLE UPLOAD!
+                    console.log(`Uploading to: ${API_BASE}/upload/`);
 
                     const formData = new FormData();
                     formData.append('file', file);
@@ -563,7 +563,7 @@
                         uploadTime: new Date().toISOString()
                     }));
 
-                    const response = await fetch(`${API_BASE}/upload/`, { // TRIPLE UPLOAD!
+                    const response = await fetch(`${API_BASE}/upload/`, {
                         method: 'POST',
                         body: formData
                     });
@@ -630,7 +630,7 @@
         }
 
         async function downloadDocument(documentId) {
-            window.open(`${API_BASE}/upload/upload/documents/${documentId}/download`, '_blank'); // TRIPLE UPLOAD!
+            window.open(`${API_BASE}/upload/documents/${documentId}/download`, '_blank'); // TRIPLE UPLOAD!
         }
 
         async function deleteDocument(documentId) {

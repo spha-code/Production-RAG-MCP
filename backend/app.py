@@ -52,41 +52,45 @@ async def lifespan(app: FastAPI):
         )
 
     # 3. re-index anything previously uploaded to ./documents/
-    import pathlib
-    
-    from routes.upload import process_document_sync
+    import pathlib, traceback
+    from routes.upload import process_document_sync      # relative import
 
     docs_path = pathlib.Path("documents")
+    print(f"[lifespan] documents folder exists: {docs_path.exists()}")
     for doc_folder in docs_path.glob("*"):
         if not doc_folder.is_dir():
             continue
-        # find original file
-        original_file = None
-        for ext in (".txt", ".md", ".pdf", ".docx", ".csv"):
-            candidate = doc_folder / f"original{ext}"
-            if candidate.exists():
-                original_file = candidate
-                break
-        if not original_file:
-            continue
+        print(f"[lifespan] re-indexing: {doc_folder}")
+        try:
+            original_file = None
+            for ext in (".txt", ".md", ".pdf", ".docx", ".csv"):
+                candidate = doc_folder / f"original{ext}"
+                if candidate.exists():
+                    original_file = candidate
+                    break
+            if not original_file:
+                continue
 
-        file_type = original_file.suffix[1:]
-        result      = process_document_sync(
-            str(original_file),
-            original_file.name,
-            file_type,
-            chunk_size=1000,
-            chunk_overlap=200
-        )
-        if result and result["chunks"]:
-            ids  = [f"{doc_folder.name}_{i}" for i in range(len(result["chunks"]))]
-            embs = app.state.encoder.encode(result["chunks"]).tolist()
-            app.state.collection.upsert(
-                documents=result["chunks"],
-                embeddings=embs,
-                ids=ids,
-                metadatas=[{"doc_id": doc_folder.name, "file": original_file.name}] * len(ids)
+            file_type = original_file.suffix[1:]
+            result = process_document_sync(
+                str(original_file),
+                original_file.name,
+                file_type,
+                chunk_size=1000,
+                chunk_overlap=200
             )
+            if result and result["chunks"]:
+                ids  = [f"{doc_folder.name}_{i}" for i in range(len(result["chunks"]))]
+                embs = app.state.encoder.encode(result["chunks"]).tolist()
+                app.state.collection.upsert(
+                    documents=result["chunks"],
+                    embeddings=embs,
+                    ids=ids,
+                    metadatas=[{"doc_id": doc_folder.name, "file": original_file.name}] * len(ids)
+                )
+        except Exception as e:
+            print(f"[lifespan] failed on {doc_folder}: {e}")
+            traceback.print_exc()
 
     yield   # FastAPI now serves requests
 
