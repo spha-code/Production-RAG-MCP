@@ -30,6 +30,12 @@ jobs:
           uv run python backend/app.py &
           echo $! > .pidfile
           sleep 5                                      # give it time to bind
+      
+      - name: Debug – show if server is up
+        run: |
+          sleep 3
+          ps aux | grep -E 'uvicorn|python.*app\.py' || true
+          curl -v http://127.0.0.1:8000/upload/test || true
 
       - name: Smoke-test upload + search
         run: |
