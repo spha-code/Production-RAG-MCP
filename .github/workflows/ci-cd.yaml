@@ -1,4 +1,4 @@
-name: CI – FastAPI RAG smoke test
+name: CI – full stack smoke test
 
 on:
   push:
@@ -11,58 +11,64 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install uv
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH      # put uv on PATH
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-      - name: Set up Python (3.11)
+      - name: Set up Python 3.11
         run: uv python install 3.11
 
-      - name: Install project + dependencies
+      - name: Install project
         run: uv sync --frozen
 
-      - name: Start FastAPI service (background)
+      # ---------- start backends ----------
+      - name: Start FastAPI (port 8000)
         run: |
-          uv run python backend/app.py &
-          echo $! > .pidfile
-          sleep 5                                      # give it time to bind
-      
-      - name: Debug – server boot check
-        run: |
-          sleep 3
-          echo "--- server.log ---"
-          cat server.log || echo "no log file"
-          echo "--- processes ---"
-          ps aux | grep -E 'uvicorn|python.*app\.py' || true
-          echo "--- port listen ---"
-          netstat -tlnp 2>/dev/null | grep :8000 || ss -tlnp | grep :8000 || echo "port 8000 not open"
-          echo "--- health hit ---"
-          curl -v http://127.0.0.1:8000/upload/test || true
+          PYTHONUNBUFFERED=1 uv run python backend/app.py > fastapi.log 2>&1 &
+          echo $! > fastapi.pid
 
-      - name: Smoke-test upload + search
+      - name: Start static file server (port 8080)
         run: |
-          # create a tiny test file
+          python -m http.server 8080 > static.log 2>&1 &
+          echo $! > static.pid
+
+      # ---------- wait for both ports ----------
+      - name: Wait for services
+        run: |
+          for port in 8000 8080; do
+            timeout 60s bash -c "until nc -z 127.0.0.1 $port; do sleep 1; done" \
+              || { echo "Port $port not open"; exit 1; }
+          done
+          echo "Both services ready"
+
+      # ---------- quick health checks ----------
+      - name: Health check FastAPI
+        run: |
+          curl -f http://127.0.0.1:8000/upload/test || (echo "FastAPI health failed"; exit 1)
+
+      - name: Health check static server
+        run: |
+          curl -f http://127.0.0.1:8080/ || (echo "Static server health failed"; exit 1)
+
+      # ---------- functional test ----------
+      - name: Upload + search test
+        run: |
           echo "GDPR applies to any company processing EU residents data." > test.txt
+          UPLOAD=$(curl -s -w "%{http_code}" -F file=@test.txt http://127.0.0.1:8000/upload/ -o /dev/null)
+          [[ "$UPLOAD" == "200" ]] || (echo "Upload failed"; exit 1)
 
-          # upload
-          UPLOAD_RESP=$(curl -s -w "\n%{http_code}" -F file=@test.txt http://127.0.0.1:8000/upload/)
-          UPLOAD_CODE=$(tail -n1 <<< "$UPLOAD_RESP")
-          UPLOAD_BODY=$(sed '$ d' <<< "$UPLOAD_RESP")
-          [[ "$UPLOAD_CODE" == "200" ]] || (echo "Upload failed: $UPLOAD_BODY"; exit 1)
-          echo "Upload OK: $UPLOAD_BODY"
+          SEARCH=$(curl -s -w "%{http_code}" -X POST -H "Content-Type: application/json" \
+                   -d '{"query":"GDPR","k":1}' http://127.0.0.1:8000/chat -o /dev/null)
+          [[ "$SEARCH" == "200" ]] || (echo "Search failed"; exit 1)
+          echo "FastAPI smoke test OK"
 
-          # search
-          SEARCH_RESP=$(curl -s -w "\n%{http_code}" -X POST -H "Content-Type: application/json" \
-                        -d '{"query":"GDPR","k":1}' http://127.0.0.1:8000/chat)
-          SEARCH_CODE=$(tail -n1 <<< "$SEARCH_RESP")
-          SEARCH_BODY=$(sed '$ d' <<< "$SEARCH_RESP")
-          [[ "$SEARCH_CODE" == "200" ]] || (echo "Search failed: $SEARCH_BODY"; exit 1)
-          echo "Search OK: $SEARCH_BODY"
-
-      - name: Stop FastAPI service
+      # ---------- cleanup ----------
+      - name: Stop services
         if: always()
-        run: kill $(cat .pidfile) || true
+        run: |
+          kill $(cat fastapi.pid) || true
+          kill $(cat static.pid) || true
