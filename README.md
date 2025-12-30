@@ -116,15 +116,24 @@ Production-RAG-MCP/
 
 ### backend/app.py
 
+### backend/routes/upload.py
+
 ### web/index.html 
 
-### Add document upload - Multi-format file upload (PDF, DOCX, TXT, MD, CSV)
+### backend/local_llm.py
 
-backend/routes/upload.py
+```uv add google-genai python-dotenv```
 
 ```cd backend ---> uv add PyPDF2 python-docx pandas chardet```
 
 ### API Endpoints
+
+List all documents: http://127.0.0.1:8000/upload/documents
+
+Test the API: http://127.0.0.1:8000/docs (Swagger UI)
+
+Health check: http://127.0.0.1:8000/upload/test
+
 | Method                   | Path                              | Description                               | Request                                                                            | Response                                                               |
 | ------------------------ | --------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | **Core RAG**             |                                   |                                           |                                                                                    |                                                                        |
@@ -149,7 +158,25 @@ backend/routes/upload.py
 # Add router registration
 ```app.include_router(upload.router)```
 
+### Integrate llama LLM
+
 ```uv add llama-cpp-python```
+
+Create file: ```backend/local_llm.py```
+
+in app.py
+
+# from gemini_client import ask_gemini
+from local_llm import ask_local as ask_gemini   # same function signature
+
+### Download the weights - fully open-source, offline RAG stack with no API bills.
+
+```mkdir backend/models```
+```uv run huggingface-cli login```
+``` uv run hf download bartowski/Meta-Llama-3.1-8B-Instruct-GGUF Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf --local-dir models```
+
+
+
 
 
 

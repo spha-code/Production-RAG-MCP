@@ -219,25 +219,6 @@
             color: #721c24;
         }
 
-        /* Progress Bar */
-        .progress-container {
-            margin-top: 8px;
-        }
-
-        .progress-bar {
-            width: 100%;
-            height: 6px;
-            background: #eee;
-            border-radius: 3px;
-            overflow: hidden;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-            transition: width 0.3s ease;
-        }
-
         /* Chat Interface */
         .chat-container {
             display: flex;
@@ -285,6 +266,7 @@
             border-radius: 12px;
             max-width: 80%;
             word-wrap: break-word;
+            line-height: 1.5;
         }
 
         .message-user .message-content {
@@ -317,7 +299,7 @@
             border-color: #667eea;
         }
 
-        /* Document Management - FIXED URLS */
+        /* Document Management */
         .doc-management {
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(10px);
@@ -362,6 +344,109 @@
             font-size: 0.85rem;
         }
 
+        /* Status Indicator */
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 16px;
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 8px;
+            margin: 10px 0;
+            font-size: 0.9rem;
+            color: #667eea;
+        }
+
+        .typing-dots {
+            display: flex;
+            gap: 4px;
+        }
+
+        .typing-dots span {
+            width: 8px;
+            height: 8px;
+            background: #667eea;
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out;
+        }
+
+        .typing-dots span:nth-child(1) {
+            animation-delay: -0.32s;
+        }
+
+        .typing-dots span:nth-child(2) {
+            animation-delay: -0.16s;
+        }
+
+        @keyframes bounce {
+
+            0%,
+            80%,
+            100% {
+                transform: scale(0);
+            }
+
+            40% {
+                transform: scale(1);
+            }
+        }
+
+        /* Response Time Indicator */
+        .response-time {
+            font-size: 0.75rem;
+            color: #999;
+            margin-top: 4px;
+            text-align: right;
+            font-style: italic;
+        }
+
+        /* Mode Indicator */
+        .mode-indicator {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        .mode-doc {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .mode-gen {
+            background: #f0f9ff;
+            color: #0369a1;
+        }
+
+        /* System Stats */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #eee;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: #666;
+        }
+
         /* Responsive */
         @media (max-width: 968px) {
             .main-content {
@@ -370,6 +455,10 @@
 
             .app-title {
                 font-size: 2rem;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
             }
         }
 
@@ -393,6 +482,34 @@
                 transform: rotate(360deg);
             }
         }
+
+        /* Quick Actions */
+        .quick-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+
+        .quick-btn {
+            padding: 6px 12px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .quick-btn:hover {
+            background: #e9ecef;
+            transform: translateY(-1px);
+        }
+
+        /* Unicode safe font fallback */
+        .unicode-safe {
+            font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Android Emoji", "EmojiOne Color", "EmojiSymbols", "Symbola", sans-serif;
+        }
     </style>
 </head>
 
@@ -400,8 +517,16 @@
     <div class="app-container">
         <!-- Header -->
         <div class="app-header">
-            <h1 class="app-title">Production RAG</h1>
-            <p class="app-subtitle">Document Intelligence Platform - Upload, Search, and Analyze</p>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1 class="app-title">Production RAG</h1>
+                    <p class="app-subtitle">Document Intelligence Platform - Upload, Search, and Analyze</p>
+                </div>
+                <div id="connectionStatus"
+                    style="padding: 8px 16px; background: #d4edda; color: #155724; border-radius: 20px; font-size: 0.9rem;">
+                    ● Connected
+                </div>
+            </div>
         </div>
 
         <!-- Main Content -->
@@ -425,32 +550,88 @@
                 <input type="file" id="folderInput" class="file-input" webkitdirectory directory multiple>
 
                 <div class="file-list" id="fileList"></div>
+
+                <!-- Quick Actions -->
+                <div class="quick-actions">
+                    <button class="quick-btn" onclick="clearUploadQueue()">Clear Queue</button>
+                    <button class="quick-btn" onclick="uploadTestDocument()">Upload Test File</button>
+                    <button class="quick-btn" onclick="checkUploadStatus()">Check Status</button>
+                </div>
             </div>
 
             <!-- Chat Section -->
             <div class="chat-section">
-                <h2 class="section-title">💬 Document Search</h2>
+                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
+                    <h2 class="section-title" style="margin-bottom: 0;">💬 Document Search</h2>
+                    <div id="chatModeIndicator" class="mode-indicator mode-gen">
+                        💬 General Mode
+                    </div>
+                </div>
 
                 <div class="chat-container">
                     <div class="chat-messages" id="chatMessages">
                         <div class="message message-bot">
                             <div class="message-content">
-                                Hello! Upload some documents and ask me anything about them.
+                                <span class="mode-indicator mode-gen">💬</span>
+                                Hello! I'm your AI assistant. I can help with:
+                                <ul style="margin: 8px 0 8px 20px;">
+                                    <li><strong>General questions</strong> - Math, coding, explanations</li>
+                                    <li><strong>Document analysis</strong> - Ask about uploaded files</li>
+                                    <li><strong>File management</strong> - List, download, delete documents</li>
+                                </ul>
+                                Try "hello" or "what's in my documents?"
                             </div>
                         </div>
                     </div>
 
+                    <!-- Status Indicator -->
+                    <div class="status-indicator" id="statusIndicator" style="display: none;">
+                        <div class="typing-dots">
+                            <span></span><span></span><span></span>
+                        </div>
+                        <span>Thinking...</span>
+                    </div>
+
                     <div class="chat-input-container">
-                        <input type="text" class="chat-input" id="chatInput" placeholder="Ask about your documents...">
-                        <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+                        <input type="text" class="chat-input" id="chatInput"
+                            placeholder="Ask anything... (Press Enter to send)" onkeypress="handleKeyPress(event)">
+                        <button class="btn btn-primary" onclick="sendMessage()" id="sendButton">Send</button>
+                    </div>
+
+                    <!-- Quick Questions -->
+                    <div class="quick-actions">
+                        <button class="quick-btn" onclick="quickQuestion('hello')">Say Hello</button>
+                        <button class="quick-btn" onclick="quickQuestion('what documents do you have?')">List
+                            Docs</button>
+                        <button class="quick-btn" onclick="quickQuestion('write fibonacci in python')">Code
+                            Example</button>
+                        <button class="quick-btn" onclick="quickQuestion('explain quantum computing')">Explain
+                            Topic</button>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Document Management - FIXED TRIPLE UPLOAD URLs -->
+        <!-- Document Management -->
         <div class="doc-management">
             <h2 class="section-title">📚 Document Library</h2>
+
+            <!-- Stats -->
+            <div class="stats-grid" id="statsGrid">
+                <div class="stat-card">
+                    <div class="stat-value" id="docCount">0</div>
+                    <div class="stat-label">Documents</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalChunks">0</div>
+                    <div class="stat-label">Total Chunks</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="avgResponse">0ms</div>
+                    <div class="stat-label">Avg Response</div>
+                </div>
+            </div>
+
             <div class="doc-list" id="docList">
                 <div class="doc-item">
                     <div class="doc-info">
@@ -460,15 +641,117 @@
                 </div>
             </div>
         </div>
+
+        <!-- System Panel -->
+        <div class="doc-management" style="margin-top: 20px;">
+            <h2 class="section-title">⚙️ System Panel</h2>
+            <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                <button class="btn btn-secondary" onclick="healthCheck()">Health Check</button>
+                <button class="btn btn-secondary" onclick="clearChat()">Clear Chat</button>
+                <button class="btn btn-secondary" onclick="exportConversation()">Export Chat</button>
+                <button class="btn btn-secondary" onclick="toggleDebug()">Toggle Debug</button>
+            </div>
+            <div id="systemOutput"
+                style="background: #f8f9fa; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; display: none;">
+                System output will appear here...
+            </div>
+        </div>
     </div>
 
     <script>
         const API_BASE = 'http://127.0.0.1:8000';
+        const MAX_THREAD_HISTORY = 20;
 
         let uploadQueue = [];
         let isUploading = false;
+        let currentThreadId = 'default';
+        let responseTimes = [];
+        let debugMode = false;
 
-        // File selection functions
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', function () {
+            setupDragAndDrop();
+            setupFileInputs();
+            loadDocumentLibrary();
+            setupEventListeners();
+            checkBackendConnection();
+        });
+
+        // ========== SETUP FUNCTIONS ==========
+        function setupDragAndDrop() {
+            const uploadZone = document.getElementById('uploadZone');
+            uploadZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadZone.classList.add('dragover');
+            });
+            uploadZone.addEventListener('dragleave', () => {
+                uploadZone.classList.remove('dragover');
+            });
+            uploadZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadZone.classList.remove('dragover');
+                handleFiles(e.dataTransfer.files);
+            });
+        }
+
+        function setupFileInputs() {
+            document.getElementById('fileInput').addEventListener('change', (e) => {
+                handleFiles(e.target.files);
+            });
+            document.getElementById('folderInput').addEventListener('change', (e) => {
+                handleFiles(e.target.files, true);
+            });
+        }
+
+        function setupEventListeners() {
+            // Auto-focus chat input
+            document.getElementById('chatInput').focus();
+
+            // Enter key for chat
+            document.getElementById('chatInput').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+        }
+
+        // ========== BACKEND CONNECTION ==========
+        async function checkBackendConnection() {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                if (response.ok) {
+                    const data = await response.json();
+                    updateConnectionStatus('connected', '✅ Backend connected');
+                    updateStats(data);
+                } else {
+                    updateConnectionStatus('error', '❌ Backend error');
+                }
+            } catch (error) {
+                updateConnectionStatus('disconnected', '❌ Backend offline');
+                addSystemMessage('Cannot connect to backend. Make sure server is running.', 'error');
+            }
+        }
+
+        function updateConnectionStatus(status, message) {
+            const element = document.getElementById('connectionStatus');
+            const statusMap = {
+                'connected': ['#d4edda', '#155724', '● Connected'],
+                'error': ['#f8d7da', '#721c24', '⚠️ Error'],
+                'disconnected': ['#fff3cd', '#856404', '● Disconnected']
+            };
+
+            const [bgColor, textColor, text] = statusMap[status] || statusMap.disconnected;
+            element.style.background = bgColor;
+            element.style.color = textColor;
+            element.textContent = text;
+
+            if (status !== 'connected') {
+                addSystemMessage(message, status);
+            }
+        }
+
+        // ========== FILE UPLOAD FUNCTIONS ==========
         function selectFiles(event) {
             event.stopPropagation();
             document.getElementById('fileInput').click();
@@ -479,46 +762,17 @@
             document.getElementById('folderInput').click();
         }
 
-        // Drag and Drop Setup
-        function setupDragAndDrop() {
-            const uploadZone = document.getElementById('uploadZone');
-
-            uploadZone.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                uploadZone.classList.add('dragover');
-            });
-
-            uploadZone.addEventListener('dragleave', () => {
-                uploadZone.classList.remove('dragover');
-            });
-
-            uploadZone.addEventListener('drop', (e) => {
-                e.preventDefault();
-                uploadZone.classList.remove('dragover');
-                handleFiles(e.dataTransfer.files);
-            });
-        }
-
-        // File Input Handlers
-        function setupFileInputs() {
-            document.getElementById('fileInput').addEventListener('change', (e) => {
-                handleFiles(e.target.files);
-            });
-
-            document.getElementById('folderInput').addEventListener('change', (e) => {
-                handleFiles(e.target.files, true);
-            });
-        }
-
-        // Handle Files
         function handleFiles(files, isFolder = false) {
             const fileArray = Array.from(files);
+            if (fileArray.length === 0) return;
+
             uploadQueue = [...uploadQueue, ...fileArray];
             displayFileList();
             processUploadQueue();
+
+            addSystemMessage(`Added ${fileArray.length} file(s) to upload queue`, 'info');
         }
 
-        // Display File List
         function displayFileList() {
             const fileList = document.getElementById('fileList');
             fileList.innerHTML = '';
@@ -529,7 +783,7 @@
                 fileItem.innerHTML = `
                     <div class="file-icon">📄</div>
                     <div class="file-info">
-                        <div class="file-name">${file.name}</div>
+                        <div class="file-name">${escapeHtml(file.name)}</div>
                         <div class="file-size">${formatFileSize(file.size)}</div>
                     </div>
                     <div class="file-status status-pending" id="status-${index}">
@@ -540,22 +794,17 @@
             });
         }
 
-        // Process Upload Queue - FIXED TRIPLE UPLOAD URLs
         async function processUploadQueue() {
             if (isUploading || uploadQueue.length === 0) return;
-
             isUploading = true;
 
             for (let i = 0; i < uploadQueue.length; i++) {
                 const file = uploadQueue[i];
                 const statusElement = document.getElementById(`status-${i}`);
-
                 statusElement.className = 'file-status status-uploading';
                 statusElement.textContent = 'Uploading...';
 
                 try {
-                    console.log(`Uploading to: ${API_BASE}/upload/`);
-
                     const formData = new FormData();
                     formData.append('file', file);
                     formData.append('metadata', JSON.stringify({
@@ -570,41 +819,51 @@
                     });
 
                     const result = await response.json();
-                    console.log('Upload result:', result);
 
                     if (response.ok) {
                         statusElement.className = 'file-status status-success';
                         statusElement.textContent = 'Success';
-                        addMessage(`Uploaded ${file.name} (${result.total_chunks} chunks)`, 'bot');
+                        addChatMessage(`✅ Uploaded: ${file.name} (${result.total_chunks} chunks)`, 'bot', 'system');
                     } else {
                         statusElement.className = 'file-status status-error';
-                        statusElement.textContent = `Error: ${result.detail || 'Unknown error'}`;
-                        addMessage(`Failed to upload ${file.name}`, 'bot');
+                        statusElement.textContent = 'Error';
+                        addChatMessage(`❌ Failed: ${file.name}`, 'bot', 'system');
                     }
                 } catch (error) {
-                    console.error('Upload error:', error);
                     statusElement.className = 'file-status status-error';
                     statusElement.textContent = 'Network Error';
-                    addMessage(`Error uploading ${file.name}`, 'bot');
+                    addSystemMessage(`Upload failed: ${error.message}`, 'error');
                 }
             }
 
             uploadQueue = [];
             isUploading = false;
-            loadDocumentLibrary(); // Reload document list after upload
+            loadDocumentLibrary();
         }
 
-        // DOCUMENT MANAGEMENT FUNCTIONS - FIXED TRIPLE UPLOAD URLs!
+        // ========== DOCUMENT MANAGEMENT ==========
         async function loadDocumentLibrary() {
             try {
-                const response = await fetch(`${API_BASE}/upload/documents`); // TRIPLE UPLOAD!
+                const response = await fetch(`${API_BASE}/upload/documents`);
                 const data = await response.json();
+
+                // Update stats
+                document.getElementById('docCount').textContent = data.total_documents;
+                document.getElementById('totalChunks').textContent =
+                    data.documents.reduce((sum, doc) => sum + (doc.total_chunks || 0), 0);
 
                 const docList = document.getElementById('docList');
                 docList.innerHTML = '';
 
                 if (data.total_documents === 0) {
-                    docList.innerHTML = '<div class="doc-item"><div class="doc-info"><h4>No documents uploaded yet</h4><p>Upload some files to get started</p></div></div>';
+                    docList.innerHTML = `
+                        <div class="doc-item">
+                            <div class="doc-info">
+                                <h4>No documents yet</h4>
+                                <p>Upload files to get started</p>
+                            </div>
+                        </div>
+                    `;
                     return;
                 }
 
@@ -613,107 +872,349 @@
                     docItem.className = 'doc-item';
                     docItem.innerHTML = `
                         <div class="doc-info">
-                            <h4>${doc.filename}</h4>
+                            <h4>${escapeHtml(doc.filename)}</h4>
                             <p>${doc.file_type} • ${formatFileSize(doc.file_size)} • ${doc.total_chunks} chunks</p>
                             <p>Uploaded: ${new Date(doc.upload_time).toLocaleString()}</p>
                         </div>
                         <div class="doc-actions">
-                            <button class="btn btn-secondary btn-small" onclick="downloadDocument('${doc.document_id}')">Download</button>
-                            <button class="btn btn-secondary btn-small" onclick="deleteDocument('${doc.document_id}')">Delete</button>
+                            <button class="btn btn-secondary btn-small" onclick="downloadDocument('${doc.document_id}')">
+                                Download
+                            </button>
+                            <button class="btn btn-secondary btn-small" onclick="deleteDocument('${doc.document_id}')">
+                                Delete
+                            </button>
                         </div>
                     `;
                     docList.appendChild(docItem);
                 });
             } catch (error) {
-                console.error('Failed to load documents:', error);
-                document.getElementById('docList').innerHTML = '<div class="doc-item"><div class="doc-info"><h4>Error loading documents</h4><p>Could not connect to server</p></div></div>';
+                addSystemMessage(`Failed to load documents: ${error.message}`, 'error');
             }
         }
 
         async function downloadDocument(documentId) {
-            window.open(`${API_BASE}/upload/documents/${documentId}/download`, '_blank'); // TRIPLE UPLOAD!
+            window.open(`${API_BASE}/upload/documents/${documentId}/download`, '_blank');
         }
 
         async function deleteDocument(documentId) {
-            if (confirm('Are you sure you want to delete this document?')) {
-                try {
-                    const response = await fetch(`${API_BASE}/upload/documents/${documentId}`, { // TRIPLE UPLOAD!
-                        method: 'DELETE'
-                    });
+            if (!confirm('Are you sure you want to delete this document?')) return;
 
-                    if (response.ok) {
-                        addMessage(`Document deleted successfully`, 'bot');
-                        loadDocumentLibrary(); // Reload the list
-                    } else {
-                        addMessage(`Failed to delete document`, 'bot');
-                    }
-                } catch (error) {
-                    addMessage(`Error deleting document`, 'bot');
+            try {
+                const response = await fetch(`${API_BASE}/upload/documents/${documentId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    addChatMessage(`🗑️ Document deleted`, 'bot', 'system');
+                    loadDocumentLibrary();
+                } else {
+                    addChatMessage(`❌ Failed to delete document`, 'bot', 'system');
                 }
+            } catch (error) {
+                addSystemMessage(`Delete failed: ${error.message}`, 'error');
             }
         }
 
-        // Chat Functions
-        function sendMessage() {
+        // ========== CHAT FUNCTIONS ==========
+        async function sendMessage() {
             const input = document.getElementById('chatInput');
             const message = input.value.trim();
             if (!message) return;
 
-            addMessage(message, 'user');
+            // Clear input and disable
             input.value = '';
+            input.disabled = true;
+            const sendButton = document.getElementById('sendButton');
+            sendButton.disabled = true;
+            sendButton.innerHTML = '<span class="loading"></span>';
 
-            fetch(`${API_BASE}/chat`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: message, k: 5 })
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.chunks && data.chunks.length > 0) {
-                        const formattedResponse = data.chunks.map((chunk, i) =>
-                            `${i + 1}. ${chunk}`
-                        ).join('\n\n');
-                        addMessage(formattedResponse, 'bot');
-                    } else {
-                        addMessage('No relevant documents found.', 'bot');
-                    }
-                })
-                .catch(error => {
-                    addMessage('Error: Could not search documents.', 'bot');
+            // Add user message
+            addChatMessage(message, 'user');
+
+            // Show thinking indicator
+            showThinkingIndicator();
+
+            const startTime = Date.now();
+
+            try {
+                const response = await fetch(`${API_BASE}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: message,
+                        k: 5,
+                        thread_id: currentThreadId
+                    })
                 });
+
+                const data = await response.json();
+                const elapsed = Date.now() - startTime;
+
+                // Record response time
+                responseTimes.push(elapsed);
+                if (responseTimes.length > 10) responseTimes.shift();
+                const avgTime = Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length);
+                document.getElementById('avgResponse').textContent = `${avgTime}ms`;
+
+                // Hide thinking indicator
+                hideThinkingIndicator();
+
+                if (data.answer) {
+                    // Clean the response before displaying
+                    let cleanAnswer = cleanResponseText(data.answer);
+
+                    // Detect mode and update indicator
+                    const isDocMode = cleanAnswer.includes('📄');
+                    updateChatModeIndicator(isDocMode ? 'doc' : 'gen');
+
+                    // Add response time for slow responses
+                    if (elapsed > 3000) {
+                        cleanAnswer += `\n\n_Response took ${elapsed / 1000}s_`;
+                    }
+
+                    addChatMessage(cleanAnswer, 'bot', isDocMode ? 'doc' : 'gen', elapsed);
+                } else {
+                    addChatMessage('🤔 No response received', 'bot', 'system');
+                }
+            } catch (error) {
+                hideThinkingIndicator();
+                addChatMessage('❌ Connection error. Check if backend is running.', 'bot', 'system');
+                addSystemMessage(`Chat error: ${error.message}`, 'error');
+            } finally {
+                // Re-enable input
+                input.disabled = false;
+                sendButton.disabled = false;
+                sendButton.textContent = 'Send';
+                input.focus();
+            }
         }
 
-        function addMessage(text, sender) {
+        function cleanResponseText(text) {
+            if (!text) return '';
+
+            // Remove the replacement character �
+            text = text.replace(/�/g, '');
+
+            // Remove duplicate emojis at start
+            if (text.startsWith("💬💬")) {
+                text = "💬" + text.substring(2);
+            } else if (text.startsWith("📄📄")) {
+                text = "📄" + text.substring(2);
+            }
+
+            // Ensure proper spacing after emoji
+            if (text.startsWith("💬") && text.length > 1 && text[1] !== ' ') {
+                text = "💬 " + text.substring(1);
+            } else if (text.startsWith("📄") && text.length > 1 && text[1] !== ' ') {
+                text = "📄 " + text.substring(1);
+            }
+
+            return text;
+        }
+
+        function quickQuestion(question) {
+            document.getElementById('chatInput').value = question;
+            sendMessage();
+        }
+
+        // ========== UI HELPERS ==========
+        function showThinkingIndicator() {
+            document.getElementById('statusIndicator').style.display = 'flex';
+        }
+
+        function hideThinkingIndicator() {
+            document.getElementById('statusIndicator').style.display = 'none';
+        }
+
+        function updateChatModeIndicator(mode) {
+            const element = document.getElementById('chatModeIndicator');
+            if (mode === 'doc') {
+                element.className = 'mode-indicator mode-doc';
+                element.innerHTML = '📄 Document Mode';
+            } else {
+                element.className = 'mode-indicator mode-gen';
+                element.innerHTML = '💬 General Mode';
+            }
+        }
+
+        function addChatMessage(text, sender, mode = 'gen', responseTime = null) {
             const messagesContainer = document.getElementById('chatMessages');
+
+            // Remove thinking indicator if present
+            hideThinkingIndicator();
+
+            // Clean the text first
+            let cleanedText = cleanResponseText(text);
+
+            // Extract mode from text
+            let detectedMode = mode;
+            let displayText = cleanedText;
+
+            if (cleanedText.startsWith("📄")) {
+                detectedMode = 'doc';
+                displayText = cleanedText.substring(1).trim();
+            } else if (cleanedText.startsWith("💬")) {
+                detectedMode = 'gen';
+                displayText = cleanedText.substring(1).trim();
+            }
+
+            // Update mode indicator
+            updateChatModeIndicator(detectedMode);
+
+            let modeIndicator = '';
+            if (sender === 'bot') {
+                modeIndicator = detectedMode === 'doc'
+                    ? '<span class="mode-indicator mode-doc">📄</span>'
+                    : '<span class="mode-indicator mode-gen">💬</span>';
+            }
+
+            let timeIndicator = '';
+            if (responseTime && responseTime > 1000) {
+                timeIndicator = `<div class="response-time">${responseTime}ms</div>`;
+            }
+
+            // Use textContent for emoji-safe display
             const messageDiv = document.createElement('div');
             messageDiv.className = `message message-${sender}`;
-            messageDiv.innerHTML = `
-                <div class="message-content">${text.replace(/\n/g, '<br>')}</div>
-            `;
+
+            // Create content with proper handling
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+
+            // Add mode indicator if needed
+            if (modeIndicator) {
+                const indicatorSpan = document.createElement('span');
+                indicatorSpan.innerHTML = modeIndicator;
+                contentDiv.appendChild(indicatorSpan);
+            }
+
+            // Add the text content (escaped for HTML, but emojis preserved)
+            const textSpan = document.createElement('span');
+            textSpan.className = 'unicode-safe';
+            textSpan.innerHTML = escapeHtml(displayText).replace(/\n/g, '<br>');
+            contentDiv.appendChild(textSpan);
+
+            // Add time indicator if needed
+            if (timeIndicator) {
+                const timeDiv = document.createElement('div');
+                timeDiv.innerHTML = timeIndicator;
+                contentDiv.appendChild(timeDiv);
+            }
+
+            messageDiv.appendChild(contentDiv);
             messagesContainer.appendChild(messageDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
 
-        // Utility Functions
+        function addSystemMessage(text, type = 'info') {
+            if (!debugMode) return;
+
+            const container = document.getElementById('systemOutput');
+            const timestamp = new Date().toLocaleTimeString();
+            const color = type === 'error' ? '#dc3545' : type === 'warning' ? '#ffc107' : '#28a745';
+
+            container.innerHTML += `<div style="color: ${color}; margin: 2px 0;">[${timestamp}] ${text}</div>`;
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // ========== UTILITY FUNCTIONS ==========
         function formatFileSize(bytes) {
             if (bytes === 0) return '0 Bytes';
             const k = 1024;
             const sizes = ['Bytes', 'KB', 'MB', 'GB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
         }
 
-        // Initialize
-        document.addEventListener('DOMContentLoaded', function () {
-            setupDragAndDrop();
-            setupFileInputs();
-            loadDocumentLibrary(); // This loads the document management system!
-        });
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
 
-        // Enter key for chat
-        document.getElementById('chatInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
-        });
+        function handleKeyPress(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        // ========== SYSTEM FUNCTIONS ==========
+        async function healthCheck() {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                addSystemMessage(`Health: ${JSON.stringify(data, null, 2)}`, 'info');
+            } catch (error) {
+                addSystemMessage(`Health check failed: ${error.message}`, 'error');
+            }
+        }
+
+        function clearChat() {
+            if (!confirm('Clear all chat messages?')) return;
+            document.getElementById('chatMessages').innerHTML = `
+                <div class="message message-bot">
+                    <div class="message-content">
+                        <span class="mode-indicator mode-gen">💬</span>
+                        Chat cleared. Ready for new conversation!
+                    </div>
+                </div>
+            `;
+            addSystemMessage('Chat cleared', 'info');
+        }
+
+        function clearUploadQueue() {
+            uploadQueue = [];
+            displayFileList();
+            addSystemMessage('Upload queue cleared', 'info');
+        }
+
+        function exportConversation() {
+            const messages = document.querySelectorAll('.message-content');
+            let exportText = '=== Chat Export ===\n\n';
+            messages.forEach(msg => {
+                exportText += msg.textContent + '\n\n';
+            });
+
+            const blob = new Blob([exportText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `chat-export-${new Date().toISOString().slice(0, 10)}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            addSystemMessage('Conversation exported', 'info');
+        }
+
+        function toggleDebug() {
+            debugMode = !debugMode;
+            const output = document.getElementById('systemOutput');
+            output.style.display = debugMode ? 'block' : 'none';
+            addSystemMessage(`Debug mode ${debugMode ? 'enabled' : 'disabled'}`, 'info');
+        }
+
+        async function uploadTestDocument() {
+            const testContent = "This is a test document about artificial intelligence. AI systems can process natural language, analyze data, and assist with various tasks. Machine learning is a subset of AI that enables systems to learn from data.";
+            const blob = new Blob([testContent], { type: 'text/plain' });
+            const file = new File([blob], 'test-ai-document.txt', { type: 'text/plain' });
+
+            // Add to queue and process
+            uploadQueue = [file];
+            displayFileList();
+            processUploadQueue();
+
+            addSystemMessage('Test document added to queue', 'info');
+        }
+
+        function updateStats(data) {
+            if (data.chroma_count !== undefined) {
+                document.getElementById('totalChunks').textContent = data.chroma_count;
+            }
+            if (data.threads !== undefined) {
+                // Could display active threads if needed
+            }
+        }
     </script>
 </body>
 
