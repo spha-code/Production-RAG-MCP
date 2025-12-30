@@ -1,0 +1,15 @@
+{
+  "document_id": "82ee94af-2f15-4d1c-916f-9f86c4353e0a",
+  "filename": "students.csv",
+  "file_type": "csv",
+  "file_size": 125,
+  "upload_time": "2025-12-30T11:30:21.890005",
+  "original_path": "documents/82ee94af-2f15-4d1c-916f-9f86c4353e0a/original.csv",
+  "total_chunks": 1,
+  "text_hash": "069692d8c2a5f862d2d28e2273225f6a",
+  "custom_metadata": {
+    "source": "web_upload",
+    "originalName": "students.csv",
+    "uploadTime": "2025-12-30T11:30:21.605Z"
+  }
+}
