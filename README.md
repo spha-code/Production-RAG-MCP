@@ -111,7 +111,7 @@ Production-RAG-MCP/
 ├── CHANGELOG.md
 ├── SECURITY.md
 ├── README.md
-└── .env                             # ignored
+└── .env                             # .gitignore
 ```
 
 ### backend/app.py
