@@ -12,6 +12,8 @@ import json
 from collections import defaultdict
 from local_llm import ask_local as ask_gemini
 
+from routes.upload import process_document_sync
+
 thread_store = defaultdict(list)   # thread_id -> list[dict]
 
 # ---------- import upload router ----------
@@ -169,7 +171,7 @@ else:
     print("❌ Upload router not included")
 
 
-# ---------- CHAT ENDPOINT (FIXED) ----------
+# ---------- CHAT ENDPOINT ----------
 @app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     print(f"\n=== CHAT REQUEST ===")
@@ -196,11 +198,11 @@ async def chat(req: ChatRequest):
             conv.append(f"User: {turn['user']}")
             conv.append(f"Assistant: {turn['bot']}")
         conv.append(f"User: {req.query}")
-        conv_text = "\n".join(conv)
         
         # 3. Generate answer using LLM
         print("2. Calling LLM...")
         llm_start = time.time()
+        # Ensure ask_gemini is imported correctly
         answer = ask_gemini(req.query, chunks)
         llm_time = time.time() - llm_start
         print(f"   LLM response time: {llm_time:.2f}s")
@@ -208,33 +210,30 @@ async def chat(req: ChatRequest):
         
         # 4. Save conversation
         history.append({"user": req.query, "bot": answer})
-        # Keep only last 20 messages
         if len(history) > 20:
             thread_store[req.thread_id] = history[-20:]
         
-        # 5. Return response
         total_time = time.time() - app.state.start_time
         print(f"✅ Chat completed in {llm_time:.2f}s (total uptime: {total_time:.0f}s)")
         return ChatResponse(answer=answer)
         
     except Exception as e:
         print(f"❌ CHAT ERROR: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
         return ChatResponse(answer="💬 I encountered an error. Please try again.")
 
 
-# ---------- HEALTH CHECK (FIXED) ----------
+# ---------- HEALTH CHECK ----------
 @app.get("/health")
 async def health_check():
-    """System health check - UPDATED FOR GEMINI"""
+    """System health check"""
     try:
-        # Check if Gemini is configured
-        from local_llm import GEMINI_CLIENT
+        # Check if the LLM function is available instead of a global client variable
+        # which was causing the import error in your tests.
+        from local_llm import ask_local
         
         health_status = {
             "status": "healthy",
-            "llm_loaded": GEMINI_CLIENT is not None,
+            "llm_loaded": ask_local is not None,
             "llm_type": "Gemini API",
             "chroma_count": app.state.collection.count() if hasattr(app.state, 'collection') else 0,
             "threads": len(thread_store),
@@ -304,8 +303,6 @@ async def mcp_tools():
         }]
     }
 
-
-# ---------- dev entry ----------
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

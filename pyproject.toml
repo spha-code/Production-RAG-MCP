@@ -1,21 +1,37 @@
 [project]
 name = "production-rag-mcp"
 version = "0.1.0"
-description = "Add your description here"
+description = "A Production-grade RAG system with MCP support"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "chardet>=5.2.0",
-    "chromadb>=1.3.7",
-    "fastapi>=0.127.0",
-    "google-genai>=1.56.0",
-    "huggingface-hub[cli]>=0.36.0",
-    "pandas>=2.3.3",
-    "pypdf2>=3.0.1",
-    "python-docx>=1.2.0",
-    "python-dotenv>=1.2.1",
-    "python-multipart>=0.0.21",
-    "requests>=2.32.5",
-    "sentence-transformers>=5.2.0",
-    "uvicorn>=0.40.0",
+    "chromadb>=0.4.0",
+    "fastapi>=0.110.0",
+    "google-genai>=0.1.0",
+    "huggingface-hub[cli]>=0.20.0",
+    "pandas>=2.2.0",
+    "pypdf>=6.5.0",
+    "python-docx>=1.1.0",
+    "python-dotenv>=1.0.0",
+    "python-multipart>=0.0.9",
+    "requests>=2.31.0",
+    "sentence-transformers>=2.5.0",
+    "uvicorn>=0.27.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "httpx>=0.27.0",
+]
+
+[tool.uv]
+# IMPORTANT: This stops uv from looking for a src/ folder
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["backend"]
+testpaths = ["tests"]
+addopts = "-v"
