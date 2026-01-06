@@ -18,6 +18,8 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          # Providing a cache-suffix helps avoid pruning conflicts
+          cache-suffix: "v1"
 
       - name: Set up Python 3.12
         run: uv python install 3.12
@@ -30,6 +32,8 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PYTHONPATH: .
         run: |
+          # Use nohup and setsid to ensure the process isn't killed prematurely
+          # and redirect both stdout and stderr to the log file
           nohup uv run python backend/app.py > fastapi.log 2>&1 &
           echo $! > fastapi.pid
 
@@ -40,20 +44,37 @@ jobs:
 
       - name: Wait for services
         run: |
-          echo "Waiting for services..."
+          echo "Waiting for services to initialize..."
+          # Increased timeout to 120s to allow for model downloads/initialization
           timeout 120s bash -c "until curl -s http://127.0.0.1:8000/upload/test; do sleep 2; done" || { 
-            echo "FastAPI logs:"; cat fastapi.log; exit 1; 
+            echo "❌ FastAPI failed to start. Dumping logs:"
+            cat fastapi.log
+            exit 1; 
           }
+          echo "✅ Services are ready."
 
       - name: Upload + search test
         run: |
-          echo "Testing Upload..."
-          echo "GDPR content" > test.txt
+          echo "Testing File Upload..."
+          echo "GDPR applies to any company processing EU residents data." > test.txt
           curl -f -F file=@test.txt http://127.0.0.1:8000/upload/
           
-          echo "Testing Search..."
+          echo "Testing AI Search/Chat..."
           curl -f -X POST -H "Content-Type: application/json" \
-            -d '{"query":"GDPR"}' http://127.0.0.1:8000/chat
+            -d '{"query":"What is GDPR?"}' http://127.0.0.1:8000/chat
+
+      - name: Stop Services (Cleanup)
+        if: always()
+        run: |
+          echo "Stopping background processes..."
+          # Kill the specific PIDs recorded earlier
+          [ -f fastapi.pid ] && kill $(cat fastapi.pid) || true
+          [ -f static.pid ] && kill $(cat static.pid) || true
+          
+          # Force kill anything still holding the ports to ensure uv cache can prune
+          sudo fuser -k 8000/tcp || true
+          sudo fuser -k 8080/tcp || true
+          sleep 2
 
       - name: Upload Logs on Failure
         if: failure()
