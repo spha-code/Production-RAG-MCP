@@ -5,9 +5,8 @@
 
 Docker:
 
-- start docker desktop
-```docker version```
 ```docker compose up -d --build```
+
 ```docker compose up -d```
 
 
@@ -46,11 +45,6 @@ Supports document ingestion (PDF, DOCX, TXT, CSV), semantic search, and MCP-comp
 Production-RAG-MCP/
 ├── backend/                         # Python service + ML + MCP
 │   ├── app.py                       # FastAPI entry: mounts routers
-│   ├── config.py                    # env-based settings
-│   ├── logging_config.py            # structured json logs
-│   ├── telemetry.py                 # OTel + Prometheus
-│   ├── exceptions.py                # custom HTTP handlers
-│   ├── gunicorn_conf.py             # prod ASGI runner config
 │   ├── routes/                      # API endpoints
 │   │   ├── __init__.py
 │   │   └── upload.py                # /upload endpoint
@@ -59,7 +53,6 @@ Production-RAG-MCP/
 │   │   └── auth.py                  # JWT / API-key guard
 │   ├── rag/
 │   │   ├── __init__.py
-│   │   ├── retriever.py             # Chroma & sentence-transformers
 │   │   └── schemas.py               # Pydantic models
 │   ├── mcp/
 │   │   ├── __init__.py
