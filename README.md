@@ -1,14 +1,15 @@
 #### Run the repo:
 ```uv run python -m backend.app``` ---> http://127.0.0.1:8000/docs#/
 
-```sudo systemctl start nginx``` ---> http://localhost:8080/
+```sudo systemctl start nginx``` ---> http://localhost
 
 Docker:
 
 - start docker desktop
 ```docker version```
-```docker compose build --no-cache```
-```docker compose up```
+```docker compose up -d --build```
+```docker compose up -d```
+
 
 #### Clone empty repo from github:
 
