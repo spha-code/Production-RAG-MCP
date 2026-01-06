@@ -28,6 +28,7 @@ jobs:
       - name: Start FastAPI (port 8000)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PYTHONPATH: .
         run: |
           nohup uv run python backend/app.py > fastapi.log 2>&1 &
           echo $! > fastapi.pid
