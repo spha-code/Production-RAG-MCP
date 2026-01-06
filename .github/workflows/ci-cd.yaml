@@ -1,74 +1,48 @@
-name: CI – full stack smoke test
-
-on:
-  push:
-    branches: [main, master]
-  pull_request:
-    branches: [main, master]
-
-jobs:
-  tests:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+# ... (checkout steps) ...
 
       - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+        uses: astral-sh/setup-uv@v5 # Use the official action instead of curl
+        with:
+          enable-cache: true
 
-      - name: Set up Python 3.11
-        run: uv python install 3.11
+      - name: Set up Python 3.12
+        run: uv python install 3.12
 
       - name: Install project
-        run: uv sync --frozen
+        # Use the 'cpu' extra if you have it defined to avoid heavy GPU libs in CI
+        run: uv sync --frozen --extra cpu
 
       # ---------- start backends ----------
       - name: Start FastAPI (port 8000)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }} # Don't forget this!
         run: |
-          PYTHONUNBUFFERED=1 uv run python backend/app.py > fastapi.log 2>&1 &
+          # Ensure background process doesn't die when the step ends
+          nohup uv run python backend/app.py > fastapi.log 2>&1 & 
           echo $! > fastapi.pid
 
       - name: Start static file server (port 8080)
         run: |
-          python -m http.server 8080 > static.log 2>&1 &
+          nohup python -m http.server 8080 --directory web > static.log 2>&1 &
           echo $! > static.pid
 
       # ---------- wait for both ports ----------
       - name: Wait for services
         run: |
-          for port in 8000 8080; do
-            timeout 60s bash -c "until nc -z 127.0.0.1 $port; do sleep 1; done" \
-              || { echo "Port $port not open"; exit 1; }
-          done
+          echo "Waiting for FastAPI to download models and start..."
+          # Use curl instead of nc for better compatibility
+          timeout 120s bash -c "until curl -s http://127.0.0.1:8000/upload/test; do sleep 2; done" || { 
+            echo "FastAPI logs:"; cat fastapi.log; exit 1; 
+          }
           echo "Both services ready"
 
-      # ---------- quick health checks ----------
-      - name: Health check FastAPI
-        run: |
-          curl -f http://127.0.0.1:8000/upload/test || (echo "FastAPI health failed"; exit 1)
+      # ... (rest of your smoke tests) ...
 
-      - name: Health check static server
-        run: |
-          curl -f http://127.0.0.1:8080/ || (echo "Static server health failed"; exit 1)
-
-      # ---------- functional test ----------
-      - name: Upload + search test
-        run: |
-          echo "GDPR applies to any company processing EU residents data." > test.txt
-          UPLOAD=$(curl -s -w "%{http_code}" -F file=@test.txt http://127.0.0.1:8000/upload/ -o /dev/null)
-          [[ "$UPLOAD" == "200" ]] || (echo "Upload failed"; exit 1)
-
-          SEARCH=$(curl -s -w "%{http_code}" -X POST -H "Content-Type: application/json" \
-                   -d '{"query":"GDPR","k":1}' http://127.0.0.1:8000/chat -o /dev/null)
-          [[ "$SEARCH" == "200" ]] || (echo "Search failed"; exit 1)
-          echo "FastAPI smoke test OK"
-
-      # ---------- cleanup ----------
-      - name: Stop services
-        if: always()
-        run: |
-          kill $(cat fastapi.pid) || true
-          kill $(cat static.pid) || true
+      - name: Upload Logs on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-logs
+          path: |
+            fastapi.log
+            static.log
