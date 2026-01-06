@@ -1,0 +1,37 @@
+services:
+  backend:
+    build: .
+    container_name: rag-backend
+    env_file:
+      - .env
+    expose:
+      - "8000"
+    healthcheck:
+      # We use the lighter /test endpoint
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/test')"]
+      interval: 10s       # Check every 10 seconds
+      timeout: 5s         # Allow 5 seconds for the response
+      retries: 10         # Try 10 times before failing
+      start_period: 60s   # WAIT 60 SECONDS before even starting to check (AI loading time)
+    restart: unless-stopped
+    networks:
+      - app-net
+
+  nginx:
+    image: nginx:alpine
+    container_name: rag-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx.docker.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./web:/usr/share/nginx/html:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-net
+
+networks:
+  app-net:
+    driver: bridge

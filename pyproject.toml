@@ -3,7 +3,7 @@ name = "production-rag-mcp"
 version = "0.1.0"
 description = "A Production-grade RAG system with MCP support"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
     "chardet>=5.2.0",
     "chromadb>=0.4.0",
@@ -20,6 +20,13 @@ dependencies = [
     "uvicorn>=0.27.0",
 ]
 
+# CPU-only torch for slim Docker image
+[project.optional-dependencies]
+cpu = [
+    "torch>=2.2.1",
+    "torchvision>=0.17.1",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
@@ -27,8 +34,12 @@ dev = [
     "httpx>=0.27.0",
 ]
 
+# PyTorch CPU index (no CUDA wheels)
+[[tool.uv.index]]
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
 [tool.uv]
-# IMPORTANT: This stops uv from looking for a src/ folder
 package = false
 
 [tool.pytest.ini_options]

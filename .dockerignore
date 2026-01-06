@@ -1,0 +1,16 @@
+# Ignore everything
+**/*
+
+# Whitelist the config files
+!pyproject.toml
+!uv.lock
+!.python-version
+
+# Whitelist the directory structures
+!backend/
+!web/
+
+# (Optional) Re-ignore common junk inside those folders
+backend/**/__pycache__
+backend/**/*.pyc
+web/node_modules
