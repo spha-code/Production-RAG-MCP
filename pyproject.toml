@@ -44,6 +44,6 @@ explicit = true
 package = false
 
 [tool.pytest.ini_options]
-pythonpath = ["backend"]
+pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-v"

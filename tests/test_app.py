@@ -1,61 +1,67 @@
 # tests/test_app.py
-import pytest
+
 
 def test_health_check(client):
-    """
-    Test the /health endpoint. 
-    Expects 'healthy'.
-    """
     response = client.get("/health")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
-    assert data["service"] == "ProductionRAG-MCP"
-    assert "llm_type" in data
+    # A fresh store holds only the 3 seed sentences
+    assert data["chroma_count"] == 3
+    assert data["uptime"] >= 0
+
 
 def test_test_endpoint(client):
-    """Test the basic heart-beat endpoint"""
     response = client.get("/test")
     assert response.status_code == 200
-    assert response.json()["message"] == "Backend is running"
-    assert "timestamp" in response.json()
-
-def test_mcp_discovery(client):
-    """Test the MCP tool definition endpoint for external LLM discovery"""
-    response = client.get("/mcp")
-    assert response.status_code == 200
     data = response.json()
-    assert "tools" in data
-    assert data["tools"][0]["name"] == "semantic_search"
+    assert data["status"] == "ok"
+    assert "timestamp" in data
+
 
 def test_chat_endpoint(client, mock_llm):
-    """
-    Test the full RAG chat flow.
-    The mock_llm fixture ensures we don't call the real Gemini API.
-    """
-    payload = {
-        "query": "What is the dose of Paracetamol?",
-        "thread_id": "test_thread_123",
-        "k": 3
-    }
+    payload = {"query": "What is the dose of Paracetamol?", "thread_id": "t1", "k": 3}
     response = client.post("/chat", json=payload)
-    
+
     assert response.status_code == 200
-    data = response.json()
-    assert "answer" in data
-    # This matches the 'Mocked Gemini Response' string in conftest.py
-    assert "Mocked Gemini Response" in data["answer"]
+    assert response.json()["answer"] == "Mocked Gemini Response"
+    mock_llm.assert_called_once()
+
+
+def test_chat_excludes_seed_data(client, mock_llm):
+    """Seed sentences must never be sent to the LLM as context."""
+    client.post("/chat", json={"query": "What is GDPR?"})
+    _, chunks = mock_llm.call_args.args
+    assert chunks == []
+
+
+def test_chat_cache_reuses_answer_for_rephrased_question(client, mock_llm):
+    first = client.post("/chat", json={"query": "What is the capital of France?"})
+    second = client.post("/chat", json={"query": "What's the capital city of France?"})
+
+    assert first.json()["answer"] == second.json()["answer"] == "Mocked Gemini Response"
+    mock_llm.assert_called_once()  # the second answer came from the cache
+
+
+def test_chat_cache_misses_for_different_question(client, mock_llm):
+    client.post("/chat", json={"query": "What is the capital of France?"})
+    client.post("/chat", json={"query": "What is the capital of Germany?"})
+    assert mock_llm.call_count == 2
+
+
+def test_chat_errors_are_not_cached(client, mock_llm):
+    mock_llm.return_value = "❌ API error 503: busy"
+    client.post("/chat", json={"query": "What is the capital of France?"})
+    client.post("/chat", json={"query": "What is the capital of France?"})
+    assert mock_llm.call_count == 2
+
 
 def test_document_info_empty(client):
-    """Test getting document info (should be empty but valid in a clean test env)"""
     response = client.get("/chat/documents/info")
     assert response.status_code == 200
-    data = response.json()
-    assert "total_documents" in data
-    assert isinstance(data["documents"], list)
+    assert response.json() == {"total_documents": 0, "documents": []}
 
-def test_chat_error_handling(client):
-    """Test that the chat endpoint handles internal errors gracefully"""
-    # Sending an empty/invalid payload to trigger a validation error
+
+def test_chat_validation_error(client):
     response = client.post("/chat", json={})
-    assert response.status_code == 422 # FastAPI validation error
+    assert response.status_code == 422

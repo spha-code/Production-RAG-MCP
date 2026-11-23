@@ -1,53 +1,65 @@
 # tests/test_upload.py
 import io
-import pytest
+
+TEXT = b"Ibuprofen typical adult dose is 200-400 mg every 4 to 6 hours."
+
+
+def upload(client, content=TEXT, name="ibuprofen.txt"):
+    files = {"file": (name, io.BytesIO(content), "text/plain")}
+    return client.post("/upload/", files=files, data={"chunk_size": 500, "chunk_overlap": 50})
+
 
 def test_upload_text_file(client):
-    """Test uploading a simple text file"""
-    # 1. Create a dummy text file in memory
-    file_content = b"This is a test document about Paracetamol dosage. It should be chunked correctly."
-    file_name = "test_meds.txt"
-    
-    # 2. Prepare the multipart form data
-    files = {
-        "file": (file_name, io.BytesIO(file_content), "text/plain")
-    }
-    data = {
-        "chunk_size": 500,
-        "chunk_overlap": 50
-    }
-
-    # 3. Post to the upload router (prefix is /upload in app.py)
-    response = client.post("/upload/", files=files, data=data)
-
-    # 4. Assertions
-    assert response.status_code == 200
-    json_data = response.json()
-    assert json_data["status"] == "success"
-    assert json_data["filename"] == file_name
-    assert "document_id" in json_data
-    assert json_data["total_chunks"] > 0
-
-def test_list_documents(client):
-    """Test the document management list endpoint"""
-    response = client.get("/upload/documents")
+    response = upload(client)
     assert response.status_code == 200
     data = response.json()
-    assert "total_documents" in data
-    assert isinstance(data["documents"], list)
+    assert data["status"] == "success"
+    assert data["filename"] == "ibuprofen.txt"
+    assert data["total_chunks"] == 1
+
+
+def test_upload_is_searchable_immediately(client, mock_llm):
+    """Uploaded chunks reach Chroma (with doc_id) without a restart."""
+    upload(client)
+    assert client.get("/health").json()["chroma_count"] == 4  # 3 seed + 1
+
+    client.post("/chat", json={"query": "What is the ibuprofen dose?"})
+    _, chunks = mock_llm.call_args.args
+    assert any("Ibuprofen" in c for c in chunks)
+
+
+def test_upload_clears_cache(client, mock_llm):
+    client.post("/chat", json={"query": "What is the ibuprofen dose?"})
+    upload(client)
+    client.post("/chat", json={"query": "What is the ibuprofen dose?"})
+    assert mock_llm.call_count == 2  # new document, so no stale cached answer
+
+
+def test_list_and_delete_document(client):
+    doc_id = upload(client).json()["document_id"]
+
+    docs = client.get("/upload/documents").json()
+    assert docs["total_documents"] == 1
+
+    response = client.delete(f"/upload/documents/{doc_id}")
+    assert response.status_code == 200
+    assert client.get("/upload/documents").json()["total_documents"] == 0
+    assert client.get("/health").json()["chroma_count"] == 3  # chunks removed too
+
+
+def test_delete_unknown_document(client):
+    assert client.delete("/upload/documents/does-not-exist").status_code == 404
+
 
 def test_upload_unsupported_type(client):
-    """Test that unsupported files are rejected"""
-    files = {
-        "file": ("virus.exe", b"fake-executable-content", "application/octet-stream")
-    }
+    files = {"file": ("virus.exe", b"fake-executable-content", "application/octet-stream")}
     response = client.post("/upload/", files=files)
     assert response.status_code == 400
     assert "Unsupported extension" in response.json()["detail"]
 
+
 def test_get_supported_types(client):
-    """Test the metadata endpoint for supported types"""
     response = client.get("/upload/supported-types")
     assert response.status_code == 200
-    assert ".pdf" in response.json()["supported_extensions"]
-    assert ".docx" in response.json()["supported_extensions"]
+    extensions = response.json()["supported_extensions"]
+    assert ".pdf" in extensions and ".docx" in extensions
