@@ -11,7 +11,7 @@ import json
 from collections import defaultdict
 
 # Module-style imports for Docker compatibility
-from backend.hf_llm import ask_llm
+from backend.gemini_llm import ask_llm
 from backend.routes.upload import process_document_sync, documents_metadata
 
 thread_store = defaultdict(list)   # thread_id -> list[dict]

@@ -4,7 +4,7 @@ import pytest
 def test_health_check(client):
     """
     Test the /health endpoint. 
-    Expects 'healthy' because we fixed the GEMINI_CLIENT import in app.py.
+    Expects 'healthy'.
     """
     response = client.get("/health")
     assert response.status_code == 200

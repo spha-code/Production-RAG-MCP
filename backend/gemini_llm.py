@@ -1,35 +1,33 @@
-# backend/hf_llm.py - answers via the Hugging Face Inference API (remote, needs HF_TOKEN)
+# backend/gemini_llm.py - answers via the Google Gemini API (remote, needs GEMINI_API_KEY)
 import os
 import time
 import requests
-from functools import lru_cache
 from dotenv import load_dotenv
 
 # ============================================================
 # ENV (SAFE LOAD – NO CRASH ON IMPORT)
 # ============================================================
 load_dotenv()
-HF_TOKEN = os.getenv("HF_TOKEN")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # ============================================================
 # MODELS
+# "latest" aliases follow Google's current release, so retiring an
+# old model version does not break the app.
 # ============================================================
-PRIMARY_MODEL  = "Qwen/Qwen2.5-7B-Instruct"
-FALLBACK_MODEL = "meta-llama/Llama-3.2-3B-Instruct"
-HF_API_URL = "https://router.huggingface.co/v1/chat/completions"
+MODELS = [
+    "gemini-flash-lite-latest",
+    "gemini-flash-latest",
+]
+API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 
 # ============================================================
-# HTTP SESSION
+# HTTP SESSION (key goes in a header, never in the URL)
 # ============================================================
 _session = requests.Session()
-_session.headers.update({
-    "Content-Type": "application/json",
-})
-
-if HF_TOKEN:
-    _session.headers.update({
-        "Authorization": f"Bearer {HF_TOKEN}"
-    })
+_session.headers.update({"Content-Type": "application/json"})
+if GEMINI_API_KEY:
+    _session.headers.update({"x-goog-api-key": GEMINI_API_KEY})
 
 # ============================================================
 # TOKEN UTILS
@@ -37,7 +35,6 @@ if HF_TOKEN:
 def est_tokens(text: str) -> int:
     return max(1, len(text) // 3)
 
-@lru_cache(maxsize=128)
 def choose_max_tokens(question: str) -> int:
     q = question.lower()
     if "short" in q:
@@ -75,12 +72,23 @@ def build_context(chunks: list[str], max_tokens: int = 900) -> str:
 # ============================================================
 # RELEVANCE HEURISTIC
 # ============================================================
-def is_relevant(question: str, chunks: list[str], min_hits: int = 2) -> bool:
-    q_words = set(question.lower().split())
+STOPWORDS = {
+    "the", "a", "an", "is", "are", "was", "were", "be", "of", "in", "on", "to",
+    "for", "and", "or", "it", "this", "that", "what", "which", "who", "how",
+    "why", "when", "where", "do", "does", "did", "i", "you", "me", "my", "can",
+    "about", "with", "from", "by", "as", "at", "document", "documents",
+}
+
+def keywords(text: str) -> set[str]:
+    words = (w.strip(".,;:!?()[]\"'").lower() for w in text.split())
+    return {w for w in words if len(w) > 2 and w not in STOPWORDS}
+
+def is_relevant(question: str, chunks: list[str], min_hits: int = 1) -> bool:
+    q_words = keywords(question)
     hits = 0
 
     for c in chunks:
-        c_words = set(c.lower().split())
+        c_words = keywords(c)
         if len(q_words & c_words) >= 1:
             hits += 1
         if hits >= min_hits:
@@ -89,36 +97,42 @@ def is_relevant(question: str, chunks: list[str], min_hits: int = 2) -> bool:
     return False
 
 # ============================================================
-# HF ROUTER CALL
+# GEMINI CALL
 # ============================================================
-def call_hf_api(
-    messages: list[dict],
-    model_id: str,
+def call_gemini(
+    system_prompt: str,
+    question: str,
+    model: str,
     max_tokens: int,
-    rag: bool
+    rag: bool,
+    retries: int = 2,
 ) -> str:
-    if not HF_TOKEN:
-        return "LLM not configured (HF_TOKEN missing)."
+    if not GEMINI_API_KEY:
+        return "LLM not configured (GEMINI_API_KEY missing)."
 
     payload = {
-        "model": model_id,
-        "messages": messages,
-        "max_tokens": max_tokens,
-        "temperature": 0.2 if rag else 0.7,
-        "top_p": 0.9,
-        "frequency_penalty": 0.1,
-        "provider": "auto",
+        "systemInstruction": {"parts": [{"text": system_prompt}]},
+        "contents": [{"role": "user", "parts": [{"text": question}]}],
+        "generationConfig": {
+            "maxOutputTokens": max_tokens,
+            "temperature": 0.2 if rag else 0.7,
+            "topP": 0.9,
+        },
     }
 
     try:
-        r = _session.post(HF_API_URL, json=payload, timeout=45)
+        r = _session.post(f"{API_BASE}/{model}:generateContent", json=payload, timeout=45)
 
         if r.status_code == 200:
-            return r.json()["choices"][0]["message"]["content"].strip()
+            data = r.json()
+            parts = data["candidates"][0].get("content", {}).get("parts", [])
+            text = "".join(p.get("text", "") for p in parts).strip()
+            return text or "❌ Empty response from Gemini."
 
-        if r.status_code == 503:
-            time.sleep(8)
-            return call_hf_api(messages, model_id, max_tokens, rag)
+        # Overloaded or rate-limited: wait briefly and retry
+        if r.status_code in (429, 503) and retries > 0:
+            time.sleep(3)
+            return call_gemini(system_prompt, question, model, max_tokens, rag, retries - 1)
 
         return f"❌ API error {r.status_code}: {r.text[:120]}"
 
@@ -126,26 +140,17 @@ def call_hf_api(
         return f"❌ Request failed: {str(e)[:120]}"
 
 # ============================================================
-# MAIN ENTRY (AUTO RAG / LLM + MEMORY)
+# MAIN ENTRY (AUTO RAG / LLM)
 # ============================================================
-def ask_llm(
-    question: str,
-    chunks: list[str] | None = None,
-    history: list[dict] | None = None
-) -> str:
+def ask_llm(question: str, chunks: list[str] | None = None) -> str:
     if not question.strip():
         return "Please ask a question."
 
     chunks = chunks or []
-    history = history or []
-
     context = build_context(chunks)
     relevant = bool(context) and is_relevant(question, chunks)
     max_out = choose_max_tokens(question)
 
-    # --------------------------------------------------------
-    # SYSTEM PROMPT
-    # --------------------------------------------------------
     if relevant:
         system_prompt = f"""
 You are a retrieval-augmented assistant.
@@ -165,26 +170,11 @@ RULES:
         system_prompt = "You are a helpful assistant. Answer naturally and concisely."
         rag = False
 
-    # --------------------------------------------------------
-    # MESSAGE ASSEMBLY (WITH MEMORY)
-    # --------------------------------------------------------
-    messages = [{"role": "system", "content": system_prompt}]
+    # Try each model in order; fall back when one is busy or unavailable
+    answer = ""
+    for model in MODELS:
+        answer = call_gemini(system_prompt, question, model, max_out, rag)
+        if not answer.startswith("❌"):
+            return answer
 
-    # Keep last 6 turns for memory safety
-    for m in history[-6:]:
-        if m.get("role") in ("user", "assistant"):
-            messages.append({
-                "role": m["role"],
-                "content": m["content"]
-            })
-
-    messages.append({"role": "user", "content": question})
-
-    # --------------------------------------------------------
-    # CALL MODEL
-    # --------------------------------------------------------
-    answer = call_hf_api(messages, PRIMARY_MODEL, max_out, rag)
-    if not answer.startswith("❌"):
-        return answer
-
-    return call_hf_api(messages, FALLBACK_MODEL, max_out, rag)
+    return answer

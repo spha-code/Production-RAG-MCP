@@ -116,7 +116,11 @@ Production-RAG-MCP/
 
 ### web/index.html 
 
-### backend/hf_llm.py
+### backend/gemini_llm.py
+
+Answers come from the Google Gemini API. Create a key at https://aistudio.google.com ("Get API key") and add it to `.env`:
+
+```GEMINI_API_KEY=your_key_here```
 
 ```uv add google-genai python-dotenv```
 
