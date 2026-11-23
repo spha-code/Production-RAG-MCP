@@ -1,4 +1,4 @@
-# backend/local_llm.py
+# backend/hf_llm.py - answers via the Hugging Face Inference API (remote, needs HF_TOKEN)
 import os
 import time
 import requests
@@ -128,7 +128,7 @@ def call_hf_api(
 # ============================================================
 # MAIN ENTRY (AUTO RAG / LLM + MEMORY)
 # ============================================================
-def ask_local(
+def ask_llm(
     question: str,
     chunks: list[str] | None = None,
     history: list[dict] | None = None
@@ -188,8 +188,3 @@ RULES:
         return answer
 
     return call_hf_api(messages, FALLBACK_MODEL, max_out, rag)
-
-# ============================================================
-# ALIAS
-# ============================================================
-ask_gemini = ask_local

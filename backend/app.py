@@ -11,7 +11,7 @@ import json
 from collections import defaultdict
 
 # Module-style imports for Docker compatibility
-from backend.local_llm import ask_local as ask_gemini
+from backend.hf_llm import ask_llm
 from backend.routes.upload import process_document_sync, documents_metadata
 
 thread_store = defaultdict(list)   # thread_id -> list[dict]
@@ -166,7 +166,7 @@ async def chat(req: ChatRequest):
         chunks = res["documents"][0] if res["documents"] else []
         
         # 2. History & LLM
-        answer = ask_gemini(req.query, chunks)
+        answer = ask_llm(req.query, chunks)
         
         # 3. Save History
         thread_store[req.thread_id].append({"user": req.query, "bot": answer})

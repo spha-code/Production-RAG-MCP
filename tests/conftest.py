@@ -16,6 +16,6 @@ def client():
 
 @pytest.fixture
 def mock_llm():
-    with patch("app.ask_gemini") as mocked_ask:
+    with patch("app.ask_llm") as mocked_ask:
         mocked_ask.return_value = "Mocked Gemini Response"
         yield mocked_ask
