@@ -8,12 +8,14 @@ from pathlib import Path
 from typing import List, Dict, Any
 from datetime import datetime, UTC
 
-from fastapi import APIRouter, File, Form, UploadFile, HTTPException, BackgroundTasks
+from fastapi import APIRouter, File, Form, UploadFile, HTTPException, BackgroundTasks, Request
 from fastapi.responses import FileResponse
 import pandas as pd
 from pypdf import PdfReader
 from docx import Document
 import chardet
+
+from backend import semantic_cache
 
 router = APIRouter(tags=["upload"])
 
@@ -112,22 +114,23 @@ def process_document(file_path: str, filename: str, file_type: str,
 # ------------------------------------------------------------------
 # ChromaDB Storage Helpers
 # ------------------------------------------------------------------
-def store_document_chunks(document_id: str, chunks: List[str], metadata: Dict[str, Any]):
+def store_document_chunks(fastapi_app, document_id: str, chunks: List[str], metadata: Dict[str, Any]):
     """
     Background task to embed and store chunks.
+    `fastapi_app` is the running app (request.app), passed in by the route.
     """
-    from app import app as fastapi_app 
-    
     # 1. Prepare flat metadata for ChromaDB
-    # Extract custom_metadata and remove it from the dict to avoid nesting
+    # Copy so the in-memory document metadata keeps its custom_metadata
+    metadata = dict(metadata)
     custom_meta = metadata.pop("custom_metadata", {})
-    
-    # Merge them into a single flat dict
-    flat_metadata = {**metadata, **custom_meta}
-    
+
+    # Merge them into a single flat dict. doc_id/file match what startup
+    # re-indexing writes and what /chat filters on.
+    flat_metadata = {**metadata, **custom_meta, "doc_id": document_id, "file": metadata.get("filename", "")}
+
     ids = [f"{document_id}_{i}" for i in range(len(chunks))]
     embs = fastapi_app.state.encoder.encode(chunks).tolist()
-    
+
     # 2. Use the flattened metadata
     fastapi_app.state.collection.upsert(
         documents=chunks,
@@ -135,6 +138,9 @@ def store_document_chunks(document_id: str, chunks: List[str], metadata: Dict[st
         ids=ids,
         metadatas=[{**flat_metadata, "chunk_idx": i} for i in range(len(chunks))]
     )
+
+    # 3. Cached answers may now be outdated
+    semantic_cache.clear(fastapi_app)
 # ------------------------------------------------------------------
 # Background & Startup Helpers
 # ------------------------------------------------------------------
@@ -154,6 +160,7 @@ def process_document_sync(
 # ------------------------------------------------------------------
 @router.post("/")
 async def upload_document(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     metadata: str = Form('{}'),
@@ -194,7 +201,7 @@ async def upload_document(
     (doc_folder / "meta.json").write_text(json.dumps(doc_meta, indent=2))
 
     # Trigger indexing in the background
-    background_tasks.add_task(store_document_chunks, doc_id, result["chunks"], doc_meta)
+    background_tasks.add_task(store_document_chunks, request.app, doc_id, result["chunks"], doc_meta)
 
     return {
         "status": "success",
@@ -217,18 +224,22 @@ def get_document(document_id: str):
     return documents_metadata[document_id]
 
 @router.delete("/documents/{document_id}")
-def delete_document(document_id: str):
+def delete_document(document_id: str, request: Request):
     if document_id not in documents_metadata:
         raise HTTPException(404, "Document not found")
-        
+
     doc_info = documents_metadata[document_id]
     folder = Path(doc_info["original_path"]).parent
-    
+
     if folder.exists():
         shutil.rmtree(folder)
-        
+
+    # Remove its chunks from the search index too, and drop cached answers
+    request.app.state.collection.delete(where={"doc_id": document_id})
+    semantic_cache.clear(request.app)
+
     del documents_metadata[document_id]
-    return {"status": "success", "message": "Document deleted from disk"}
+    return {"status": "success", "message": "Document deleted from disk and index"}
 
 @router.get("/supported-types")
 def supported_types():
