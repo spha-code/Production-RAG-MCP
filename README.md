@@ -116,7 +116,7 @@ Production-RAG-MCP/
 
 ### web/index.html 
 
-### backend/local_llm.py
+### backend/hf_llm.py
 
 ```uv add google-genai python-dotenv```
 
