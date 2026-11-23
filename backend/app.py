@@ -12,6 +12,7 @@ from collections import defaultdict
 
 # Module-style imports for Docker compatibility
 from backend.gemini_llm import ask_llm
+from backend import semantic_cache
 from backend.routes.upload import process_document_sync, documents_metadata
 
 thread_store = defaultdict(list)   # thread_id -> list[dict]
@@ -119,7 +120,10 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 print(f"⚠️ Failed to re-index {doc_folder.name}: {e}")
         if reindex_count > 0: print(f"🔄 Re-indexed {reindex_count} documents")
-    
+
+    # 6. Answer cache: start empty, since documents may have changed while the app was off
+    semantic_cache.clear(app)
+
     print("🚀 Application startup complete")
     yield
 
@@ -158,6 +162,13 @@ async def chat(req: ChatRequest):
     try:
         # 1. Retrieve
         emb = app.state.encoder.encode([req.query]).tolist()
+
+        # 0. Semantic cache: reuse the answer to a question with the same meaning
+        cached = semantic_cache.lookup(app.state.cache, emb)
+        if cached is not None:
+            thread_store[req.thread_id].append({"user": req.query, "bot": cached})
+            return ChatResponse(answer=cached)
+
         res = app.state.collection.query(
             query_embeddings=emb,
             n_results=min(req.k, 5),
@@ -167,7 +178,8 @@ async def chat(req: ChatRequest):
         
         # 2. History & LLM
         answer = ask_llm(req.query, chunks)
-        
+        semantic_cache.save(app.state.cache, emb, req.query, answer)
+
         # 3. Save History
         thread_store[req.thread_id].append({"user": req.query, "bot": answer})
         if len(thread_store[req.thread_id]) > 20:

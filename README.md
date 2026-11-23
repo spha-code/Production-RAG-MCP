@@ -1,183 +1,84 @@
-#### Run the repo:
-```uv run python -m backend.app``` ---> http://127.0.0.1:8000/docs#/
-
-```sudo systemctl start nginx``` ---> http://localhost
-
-Docker:
-
-```docker compose up -d --build```
-
-```docker compose up -d```
-
-
-#### Clone empty repo from github:
-
-```git clone https://github.com/spha-code/Production-RAG-MCP``` locally
-
-```cd Production-RAG-MCP``` -->
-```uv init``` -->
-```uv add fastapi uvicorn sentence-transformers chromadb```
-
 # Production-RAG-MCP
 
-A production-ready **Retrieval-Augmented Generation (RAG)** system with FastAPI, ChromaDB, Sentence Transformers, and a lightweight web UI.  
-Supports document ingestion (PDF, DOCX, TXT, CSV), semantic search, and MCP-compatible tool exposure.
+A Retrieval-Augmented Generation (RAG) app: upload documents, then ask questions answered from them.
+FastAPI backend, ChromaDB vector store, local Sentence-Transformers embeddings, Google Gemini for answers, and a small web chat UI.
 
----
+## How it works
 
-## 🚀 Features
+1. **Upload**: a file (PDF, DOCX, TXT, MD, CSV) is saved to `documents/`, split into ~1,000-character chunks (200 overlap), and each chunk is embedded locally with `all-MiniLM-L6-v2` (384 numbers per chunk) into Chroma (`chroma/`).
+2. **Ask**: the question is embedded the same way and Chroma returns the closest chunks.
+3. **Answer**: the chunks and the question go to Gemini, which answers only from them (or answers normally if no chunk is relevant).
+4. **Cache**: answers are cached by meaning. A rephrased question (cosine distance ≤ 0.20) gets the saved answer without calling Gemini. The cache is cleared on startup and whenever documents change.
 
-- FastAPI backend with lifecycle-managed embeddings
-- ChromaDB vector store
-- Sentence-Transformers embeddings
-- File upload (PDF, DOCX, TXT, MD, CSV)
-- Folder ingestion with progress tracking
-- Chunking + metadata handling
-- Simple web-based chat widget
-- MCP-compatible `/mcp` endpoint
-- Ready for MLOps, CI/CD, and scaling
+`chroma/` is generated: it's rebuilt from `documents/` on every startup and is not committed.
 
----
+## Setup
 
-## 📁 Project Structure
+Requires [uv](https://docs.astral.sh/uv/) and Python 3.12+.
 
-```
-Production-RAG-MCP/
-├── backend/                         # Python service + ML + MCP
-│   ├── app.py                       # FastAPI entry: mounts routers
-│   ├── routes/                      # API endpoints
-│   │   ├── __init__.py
-│   │   └── upload.py                # /upload endpoint
-│   ├── middleware/
-│   │   ├── __init__.py
-│   │   └── auth.py                  # JWT / API-key guard
-│   ├── rag/
-│   │   ├── __init__.py
-│   │   └── schemas.py               # Pydantic models
-│   ├── mcp/
-│   │   ├── __init__.py
-│   │   └── tools.py                 # MCP tool descriptor + handler
-│   ├── tests/
-│   │   ├── __init__.py
-│   │   └── test_app.py
-│   ├── alembic/                     # DB migrations (if Postgres added)
-│   │   └── versions/
-│   ├── .env.example                 # template env vars
-│   └── Dockerfile
-├── mlops/                           # MLOps pipelines & monitoring
-│   ├── data/                        # raw / labelled datasets
-│   ├── notebooks/                   # EDA & embedding quality checks
-│   ├── pipelines/
-│   │   ├── embed_validation.py      # offline eval job
-│   │   └── retrain_trigger.py       # scheduled / event retraining
-│   ├── features/
-│   │   └── chunker.py               # shared text-split logic
-│   ├── monitoring/
-│   │   ├── data_drift.py            # detect embedding drift
-│   │   └── answer_quality.py        # LLM-as-judge scoring
-│   ├── configs/
-│   │   └── embed_config.yaml        # model, chunk size, overlap
-│   ├── tests/
-│   │   └── test_pipelines.py
-│   ├── Dockerfile.pipeline          # Airflow / Prefect runner image
-│   └── README.md                    # usage docs
-├── web/                             # Next.js site & embeddable widget
-│   ├── pages/
-│   ├── components/
-│   │   └── ChatWidget.tsx
-│   ├── public/
-│   ├── styles/
-│   └── package.json
-├── ios/                             # SwiftUI Xcode project
-│   └── ProductionRAG/
-├── android/                         # Kotlin Android-Studio project
-│   └── app/
-├── iac/                             # AWS SAM infra
-│   └── template.yaml
-├── .github/
-│   └── workflows/
-│       └── ci-cd.yaml
-├── scripts/
-│   ├── build.sh
-│   └── deploy.sh
-├── docker-compose.yml               # local dev stack
-├── pyproject.toml
-├── uv.lock
-├── LICENSE
-├── CHANGELOG.md
-├── SECURITY.md
-├── README.md
-└── .env                             # .gitignore
+```bash
+uv sync
 ```
 
-### backend/app.py
+Create `.env` in the project root (it's git-ignored):
 
-### backend/routes/upload.py
+```
+GEMINI_API_KEY=your_key_here
+```
 
-### web/index.html 
+Get a free key at [aistudio.google.com](https://aistudio.google.com) → **Get API key**. The embedding model downloads automatically (~90 MB) on first start and needs no key.
 
-### backend/gemini_llm.py
+## Run
 
-Answers come from the Google Gemini API. Create a key at https://aistudio.google.com ("Get API key") and add it to `.env`:
+**Backend only**, API docs at http://127.0.0.1:8000/docs:
 
-```GEMINI_API_KEY=your_key_here```
+```bash
+uv run python -m backend.app
+```
 
-```uv add google-genai python-dotenv```
+On Windows, set `PYTHONUTF8=1` first. The app prints emoji, which the default console encoding can't show:
 
-```cd backend ---> uv add PyPDF2 python-docx pandas chardet```
+```powershell
+$env:PYTHONUTF8 = "1"; uv run python -m backend.app
+```
 
-### API Endpoints
+**Full stack with the web UI** (backend + nginx), at http://localhost:
 
-List all documents: http://127.0.0.1:8000/upload/documents
+```bash
+docker compose up -d --build
+```
 
-Test the API: http://127.0.0.1:8000/docs (Swagger UI)
+The web UI (`web/`) calls the backend through nginx at `/api/...`, so opening `web/index.html` directly won't work.
 
-Health check: http://127.0.0.1:8000/upload/test
+## API
 
-| Method                   | Path                              | Description                               | Request                                                                            | Response                                                               |
-| ------------------------ | --------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| **Core RAG**             |                                   |                                           |                                                                                    |                                                                        |
-| `POST`                   | `/chat`                           | Semantic search + generative answer       | `{ "query": "string", "k": 3 }`                                                    | `{ "chunks": ["concise answer"] }`                                     |
-| `GET`                    | `/mcp`                            | MCP-compatible tool descriptor            | —                                                                                  | `{ "tools": [{ "name": "semantic_search", … }] }`                      |
-| **Single-file Upload**   |                                   |                                           |                                                                                    |                                                                        |
-| `POST`                   | `/upload/`                        | Upload one document (PDF/DOCX/TXT/MD/CSV) | multipart/form-data (`file`, `metadata`, `chunk_size`, `chunk_overlap`)            | `{ "document_id", "filename", "total_chunks", "message" }`             |
-| **Bulk / Folder Upload** |                                   |                                           |                                                                                    |                                                                        |
-| `POST`                   | `/upload/upload/folder`           | Queue an entire folder for ingestion      | `folder_path`, `metadata`, `chunk_size`, `chunk_overlap`, `recursive`, `max_files` | `{ "status": "processing_started", "total_files" }`                    |
-| **Document Management**  |                                   |                                           |                                                                                    |                                                                        |
-| `GET`                    | `/upload/documents`               | List every ingested document              | —                                                                                  | `{ "total_documents", "documents": [ … ] }`                            |
-| `GET`                    | `/upload/documents/{id}`          | Get single document metadata              | —                                                                                  | `{ "document_id", "filename", "file_type", "upload_time", … }`         |
-| `GET`                    | `/upload/documents/{id}/download` | Download original file                    | —                                                                                  | file stream (`Content-Disposition: attachment`)                        |
-| `DELETE`                 | `/upload/documents/{id}`          | Delete document + chunks + file           | —                                                                                  | `{ "status": "success", "message" }`                                   |
-| **Utility**              |                                   |                                           |                                                                                    |                                                                        |
-| `GET`                    | `/upload/supported-types`         | Supported extensions & human names        | —                                                                                  | `{ "supported_extensions": [".pdf", …], "formats": { "pdf": "PDF" } }` |
-| `GET`                    | `/upload/test`                    | Health ping                               | —                                                                                  | `{ "status": "ok" }`                                                   |
-# Added Testing at backend/tests
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/chat` | Ask a question: `{"query": "...", "k": 3}` → `{"answer": "..."}` |
+| `POST` | `/upload/` | Upload a file (multipart: `file`, optional `metadata`, `chunk_size`, `chunk_overlap`) |
+| `GET` | `/upload/documents` | List uploaded documents |
+| `GET` | `/upload/documents/{id}` | One document's metadata |
+| `DELETE` | `/upload/documents/{id}` | Delete a document and its chunks |
+| `GET` | `/upload/supported-types` | Supported file extensions |
+| `GET` | `/health` | Status and number of stored chunks |
 
-# Added CI/CD workflow
+## Project structure
 
-# Add router registration
-```app.include_router(upload.router)```
+```
+backend/
+  app.py              FastAPI app: startup indexing, /chat, /health
+  gemini_llm.py       Gemini API calls and prompt building
+  semantic_cache.py   Answer cache (separate Chroma collection)
+  routes/upload.py    Upload, chunking, document management
+documents/            Uploaded originals (source of truth)
+chroma/               Vector DB, generated, git-ignored
+web/                  Chat UI (HTML/JS/CSS)
+deploy/               nginx configs (local and Docker)
+tests/                pytest tests
+test_docs/            Sample files to upload
+```
 
-### Integrate llama LLM
+## Known issues
 
-```uv add llama-cpp-python```
-
-Create file: ```backend/local_llm.py```
-
-in app.py
-
-# from gemini_client import ask_gemini
-from local_llm import ask_local as ask_gemini   # same function signature
-
-### Download the weights - fully open-source, offline RAG stack with no API bills.
-
-```mkdir backend/models```
-```uv run huggingface-cli login```
-``` uv run hf download bartowski/Meta-Llama-3.1-8B-Instruct-GGUF Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf --local-dir models```
-
-
-
-
-
-
-
+- **Tests don't run.** `tests/conftest.py` imports `app` instead of `backend.app`, and some assertions expect old `/health` fields.
+- **Not implemented yet** despite the name: an MCP endpoint and bulk folder upload.
