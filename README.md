@@ -62,8 +62,6 @@ Production-RAG-MCP/
 │   │   └── test_app.py
 │   ├── alembic/                     # DB migrations (if Postgres added)
 │   │   └── versions/
-│   ├── requirements-lock.txt
-│   ├── requirements-dev.txt         # dev-only deps
 │   ├── .env.example                 # template env vars
 │   └── Dockerfile
 ├── mlops/                           # MLOps pipelines & monitoring
