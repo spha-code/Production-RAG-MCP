@@ -70,3 +70,7 @@ tmp/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Chroma vector DB: generated from documents/ on startup
+chroma/
+backend/chroma/
