@@ -4,8 +4,9 @@ services:
     container_name: rag-backend
     env_file:
       - .env
-    expose:
-      - "8000"
+    ports:
+      # Localhost only: API docs at http://127.0.0.1:8000/docs
+      - "127.0.0.1:8000:8000"
     healthcheck:
       # We use the lighter /test endpoint
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/test')"]
