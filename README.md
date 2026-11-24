@@ -89,4 +89,4 @@ Each test runs the real app in a temporary folder, so your `chroma/` and `docume
 
 ## Not implemented yet
 
-Despite the name: an MCP endpoint and bulk folder upload.
+MCP endpoint and bulk folder upload.
