@@ -6,7 +6,7 @@ FastAPI backend, ChromaDB vector store, local Sentence-Transformers embeddings, 
 ## How it works
 
 1. **Upload**: a file (PDF, DOCX, TXT, MD, CSV) is saved to `documents/`, split into ~1,000-character chunks (200 overlap), and each chunk is embedded locally with `all-MiniLM-L6-v2` (384 numbers per chunk) into Chroma (`chroma/`).
-2. **Ask**: the question is embedded the same way and Chroma returns the closest chunks. The reply says which mode answered it — `rag` when chunks were sent to the model, `general` when Gemini answered on its own — and lists the sources it used.
+2. **Ask**: the question is embedded the same way and Chroma returns the closest chunks. Chunks with a cosine distance above 0.60 are dropped as unrelated. The reply says which mode answered it — `rag` when chunks were sent to the model, `general` when Gemini answered on its own, `library` for questions about the collection itself ("which documents do you have?"), answered from the document list — and lists the sources it used.
 3. **Answer**: the chunks and the question go to Gemini, which answers only from them (or answers normally if no chunk is relevant).
 4. **Cache**: answers are cached by meaning. A rephrased question (cosine distance ≤ 0.20) gets the saved answer without calling Gemini. Each entry records which documents it used, so the cache survives restarts and new uploads, and editing or deleting a document discards only the answers built from it.
 
@@ -55,7 +55,7 @@ The web UI (`web/`) calls the backend through nginx at `/api/...`, so opening `w
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/chat` | Ask a question: `{"query": "...", "k": 3}` → `{"answer": "...", "mode": "rag"\|"general", "sources": [...], "cached": false}`. `sources` lists the chunks sent to the model (`doc_id`, `file`, `chunk`, `distance`). |
+| `POST` | `/chat` | Ask a question: `{"query": "...", "k": 3}` → `{"answer": "...", "mode": "rag"\|"general"\|"library", "sources": [...], "cached": false}`. `sources` lists the chunks sent to the model (`doc_id`, `file`, `chunk`, `distance`). |
 | `POST` | `/upload/` | Upload a file (multipart: `file`, optional `metadata`, `chunk_size`, `chunk_overlap`) |
 | `GET` | `/upload/documents` | List uploaded documents |
 | `GET` | `/upload/documents/{id}` | One document's metadata |

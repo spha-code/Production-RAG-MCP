@@ -201,3 +201,71 @@ def test_restart_forgets_only_answers_that_used_the_changed_document(tmp_path, m
     assert ibuprofen.json()["answer"] == "Updated ibuprofen answer"  # stale, forgotten
     assert paracetamol.json()["answer"] == "Mocked Gemini Response"  # still cached
     assert mock_llm.call_count == 1
+
+
+def _upload_ibuprofen(client):
+    return client.post(
+        "/upload/",
+        files={
+            "file": (
+                "ibuprofen.txt",
+                io.BytesIO(b"Ibuprofen adult dose is 200-400 mg every 4 to 6 hours."),
+                "text/plain",
+            )
+        },
+        data={"chunk_size": 500, "chunk_overlap": 50},
+    )
+
+
+def test_weak_matches_are_not_sent_to_the_model(client, mock_llm):
+    """An unrelated question must not be answered from the closest-but-wrong chunk."""
+    _upload_ibuprofen(client)
+    data = client.post("/chat", json={"query": "What is the capital of France?"}).json()
+
+    _, chunks = mock_llm.call_args.args
+    assert chunks == []
+    assert data["mode"] == "general"
+    assert data["sources"] == []
+
+
+def test_library_question_lists_documents_without_llm(client, mock_llm):
+    _upload_ibuprofen(client)
+    data = client.post(
+        "/chat", json={"query": "Do you have any documents stored and accessible?"}
+    ).json()
+
+    assert data["mode"] == "library"
+    assert "1 document(s) stored" in data["answer"]
+    assert "ibuprofen.txt" in data["answer"]
+    mock_llm.assert_not_called()
+
+
+def test_library_question_with_no_documents(client, mock_llm):
+    data = client.post("/chat", json={"query": "Which files do you have?"}).json()
+    assert data["mode"] == "library"
+    assert "No documents" in data["answer"]
+    mock_llm.assert_not_called()
+
+
+def test_library_answer_is_never_cached(client, mock_llm):
+    """A document uploaded after the first question must show up the second time."""
+    client.post("/chat", json={"query": "How many documents are there?"})
+    _upload_ibuprofen(client)
+    data = client.post("/chat", json={"query": "How many documents are there?"}).json()
+    assert "ibuprofen.txt" in data["answer"]
+    assert data["cached"] is False
+
+
+def test_content_question_about_documents_still_uses_rag(client, mock_llm):
+    _upload_ibuprofen(client)
+    data = client.post(
+        "/chat", json={"query": "Which documents mention the ibuprofen dose?", "k": 1}
+    ).json()
+    assert data["mode"] == "rag"
+    mock_llm.assert_called_once()
+
+
+def test_model_is_told_which_file_each_excerpt_came_from(client, mock_llm):
+    _upload_ibuprofen(client)
+    client.post("/chat", json={"query": "What is the ibuprofen dose?", "k": 1})
+    assert mock_llm.call_args.kwargs["files"] == ["ibuprofen.txt"]

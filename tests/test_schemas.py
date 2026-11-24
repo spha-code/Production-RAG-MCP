@@ -29,3 +29,11 @@ def test_chat_response():
     assert ChatResponse(answer="Paris").answer == "Paris"
     with pytest.raises(ValidationError):
         ChatResponse()
+
+
+def test_build_context_labels_excerpts_with_file_names():
+    from backend.gemini_llm import build_context
+
+    context = build_context(["Ibuprofen dose text", "Other text"], files=["ibu.pdf", ""])
+    assert "[Excerpt 1 from ibu.pdf]" in context
+    assert "[Excerpt 2 from an uploaded document]" in context

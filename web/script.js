@@ -175,8 +175,8 @@ function addChatMessage(text, sender, mode = 'general', responseTime = null, sou
     if (sender === 'bot') {
         updateChatModeIndicator(mode);
         const icon = document.createElement('span');
-        icon.className = `mode-indicator mode-${mode === 'rag' ? 'doc' : 'gen'}`;
-        icon.textContent = mode === 'rag' ? '📄' : '💬';
+        icon.className = `mode-indicator mode-${mode === 'rag' || mode === 'library' ? 'doc' : 'gen'}`;
+        icon.textContent = { rag: '📄', library: '📚' }[mode] || '💬';
         contentDiv.appendChild(icon);
     }
 
@@ -237,9 +237,9 @@ function buildSources(sources, cached) {
 function updateChatModeIndicator(mode) {
     const el = document.getElementById('chatModeIndicator');
     if (!el) return;
-    const isRag = mode === 'rag';
-    el.className = `mode-indicator ${isRag ? 'mode-doc' : 'mode-gen'}`;
-    el.textContent = isRag ? '📄 Document Mode' : '💬 General Mode';
+    const labels = { rag: '📄 Document Mode', library: '📚 Library', general: '💬 General Mode' };
+    el.className = `mode-indicator ${mode === 'rag' || mode === 'library' ? 'mode-doc' : 'mode-gen'}`;
+    el.textContent = labels[mode] || labels.general;
 }
 
 function recordResponseTime(ms) {
