@@ -235,12 +235,111 @@ function displayFileList() {
 }
 
 async function loadDocumentLibrary() {
+    const listEl = document.getElementById('docList');
+    const docCount = document.getElementById('docCount');
     try {
         const res = await fetch(`${API_BASE}/upload/documents`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        const docCount = document.getElementById('docCount');
-        if (docCount) docCount.textContent = data.total_documents || 0;
-    } catch (e) { console.error("Library load failed", e); }
+        const docs = data.documents || [];
+        if (docCount) docCount.textContent = docs.length;
+        renderDocumentList(docs, listEl);
+    } catch (e) {
+        console.error("Library load failed", e);
+        if (listEl) {
+            listEl.innerHTML = `
+                <div class="doc-item">
+                    <div class="doc-info">
+                        <h4>Could not load documents</h4>
+                        <p>Check that the backend is running, then refresh the page.</p>
+                    </div>
+                </div>`;
+        }
+    } finally {
+        updateTotalChunks();
+    }
+}
+
+function renderDocumentList(docs, container) {
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (!docs.length) {
+        const empty = document.createElement('div');
+        empty.className = 'doc-item';
+        const info = document.createElement('div');
+        info.className = 'doc-info';
+        const title = document.createElement('h4');
+        title.textContent = 'No documents yet';
+        const hint = document.createElement('p');
+        hint.textContent = 'Upload a file above to get started';
+        info.append(title, hint);
+        empty.appendChild(info);
+        container.appendChild(empty);
+        return;
+    }
+
+    for (const doc of docs) {
+        const item = document.createElement('div');
+        item.className = 'doc-item';
+
+        const info = document.createElement('div');
+        info.className = 'doc-info';
+        const title = document.createElement('h4');
+        title.textContent = doc.filename || doc.document_id;
+        const meta = document.createElement('p');
+        const chunks = doc.total_chunks ?? 0;
+        const size = doc.file_size ? ` · ${formatBytes(doc.file_size)}` : '';
+        meta.textContent = `${chunks} chunk${chunks === 1 ? '' : 's'}${size}`;
+        info.append(title, meta);
+
+        const actions = document.createElement('div');
+        actions.className = 'doc-actions';
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn btn-small';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.addEventListener('click', () => deleteDocument(doc.document_id));
+        actions.appendChild(deleteBtn);
+
+        item.append(info, actions);
+        container.appendChild(item);
+    }
+}
+
+async function deleteDocument(documentId) {
+    if (!documentId || !confirm('Delete this document and its indexed chunks?')) return;
+    try {
+        const res = await fetch(`${API_BASE}/upload/documents/${encodeURIComponent(documentId)}`, {
+            method: 'DELETE'
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        await loadDocumentLibrary();
+    } catch (e) {
+        console.error("Delete failed", e);
+        alert('Could not delete the document. Check the backend logs.');
+    }
+}
+
+async function updateTotalChunks() {
+    try {
+        const res = await fetch(`${API_BASE}/health`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const el = document.getElementById('totalChunks');
+        if (el && data.chroma_count !== undefined) el.textContent = data.chroma_count;
+    } catch (e) { /* the connection badge already reports outages */ }
+}
+
+function formatBytes(bytes) {
+    if (!bytes) return '';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let value = bytes;
+    let unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+        value /= 1024;
+        unit++;
+    }
+    return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
 function showThinkingIndicator() { document.getElementById('statusIndicator').style.display = 'flex'; }
