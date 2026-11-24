@@ -3,6 +3,7 @@ let uploadQueue = [];
 let isUploading = false;
 let currentThreadId = 'default';
 let responseTimes = [];
+let chatLog = [];   // every message shown, for Export Chat
 
 // ========== INITIALIZATION ==========
 document.addEventListener('DOMContentLoaded', () => {
@@ -171,6 +172,7 @@ function addChatMessage(text, sender, mode = 'general', responseTime = null, sou
     contentDiv.className = 'message-content';
 
     const cleanText = text.trim();
+    chatLog.push({ time: new Date().toISOString(), sender, mode, text: cleanText, cached, sources });
 
     if (sender === 'bot') {
         updateChatModeIndicator(mode);
@@ -395,4 +397,69 @@ function setupDragAndDrop() {
 function setupFileInputs() {
     const input = document.getElementById('fileInput');
     if (input) input.addEventListener('change', (e) => handleFiles(e.target.files));
+}
+// ========== SYSTEM PANEL ==========
+function showSystemOutput(text) {
+    const out = document.getElementById('systemOutput');
+    out.style.display = 'block';
+    out.textContent = text;
+}
+
+// Health Check: ask the backend for its status and show the reply.
+async function healthCheck() {
+    showSystemOutput('Checking backend...');
+    try {
+        const res = await fetch(`${API_BASE}/health`);
+        const data = await res.json();
+        const uptime = Math.round(data.uptime || 0);
+        showSystemOutput(
+            `Status: ${data.status} (HTTP ${res.status})
+` +
+            `Stored chunks: ${data.chroma_count}
+` +
+            `Uptime: ${Math.floor(uptime / 3600)}h ${Math.floor(uptime / 60) % 60}m ${uptime % 60}s`
+        );
+        checkBackendConnection();
+    } catch (err) {
+        showSystemOutput(`Backend unreachable: ${err.message}`);
+    }
+}
+
+// Clear Chat: remove all messages except the welcome message.
+function clearChat() {
+    const container = document.getElementById('chatMessages');
+    while (container.children.length > 1) container.lastElementChild.remove();
+    chatLog = [];
+    currentThreadId = `thread-${Date.now()}`;   // start a fresh server-side history too
+    updateChatModeIndicator('general');
+    showSystemOutput('Chat cleared.');
+}
+
+// Export Chat: download the conversation as a JSON file.
+function exportConversation() {
+    if (!chatLog.length) {
+        showSystemOutput('Nothing to export yet.');
+        return;
+    }
+    const blob = new Blob([JSON.stringify(chatLog, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `chat-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    showSystemOutput(`Exported ${chatLog.length} message(s).`);
+}
+
+// Toggle Debug: show or hide the full details of the last answer.
+function toggleDebug() {
+    const out = document.getElementById('systemOutput');
+    if (out.style.display === 'block') {
+        out.style.display = 'none';
+        return;
+    }
+    const lastBot = [...chatLog].reverse().find(m => m.sender === 'bot');
+    showSystemOutput(lastBot
+        ? `Last answer (debug):
+${JSON.stringify(lastBot, null, 2)}`
+        : 'Debug: no answers yet.');
 }
