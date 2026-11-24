@@ -139,8 +139,8 @@ def store_document_chunks(fastapi_app, document_id: str, chunks: List[str], meta
         metadatas=[{**flat_metadata, "chunk_idx": i} for i in range(len(chunks))]
     )
 
-    # 3. Cached answers may now be outdated
-    semantic_cache.clear(fastapi_app)
+    # 3. Existing cached answers stay valid: the new document is additional
+    #    knowledge, it does not change what the other documents say.
 # ------------------------------------------------------------------
 # Background & Startup Helpers
 # ------------------------------------------------------------------
@@ -234,9 +234,9 @@ def delete_document(document_id: str, request: Request):
     if folder.exists():
         shutil.rmtree(folder)
 
-    # Remove its chunks from the search index too, and drop cached answers
+    # Remove its chunks from the search index too, and forget answers that used it
     request.app.state.collection.delete(where={"doc_id": document_id})
-    semantic_cache.clear(request.app)
+    semantic_cache.forget_documents(request.app.state.cache, {document_id})
 
     del documents_metadata[document_id]
     return {"status": "success", "message": "Document deleted from disk and index"}

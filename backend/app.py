@@ -80,10 +80,13 @@ async def lifespan(app: FastAPI):
         )
         print(f"🌱 Seeded with {len(docs)} example documents")
     
-    # 5. Re-index logic
+    # 5. Re-index logic: only rewrite documents whose content actually changed.
+    #    New or unchanged documents must not throw away cached answers; only an
+    #    edited or deleted document can make an existing answer stale.
     docs_path = pathlib.Path("documents")
+    changed_ids = set()  # edited or deleted documents: their answers are stale
+    added_count = 0      # brand-new document; its chunks are added, answers stay valid
     if docs_path.exists():
-        reindex_count = 0
         for doc_folder in docs_path.glob("*"):
             if not doc_folder.is_dir(): continue
             try:
@@ -100,31 +103,82 @@ async def lifespan(app: FastAPI):
                     str(original_file), original_file.name, file_type,
                     chunk_size=1000, chunk_overlap=200
                 )
-                
-                if result and result["chunks"]:
-                    ids = [f"{doc_folder.name}_{i}" for i in range(len(result["chunks"]))]
-                    embs = app.state.encoder.encode(result["chunks"]).tolist()
-                    app.state.collection.upsert(
-                        documents=result["chunks"],
-                        embeddings=embs,
-                        ids=ids,
-                        metadatas=[{"doc_id": doc_folder.name, "file": original_file.name}] * len(ids)
-                    )
-                    
-                    meta_file = doc_folder / "meta.json"
-                    meta = json.loads(meta_file.read_text()) if meta_file.exists() else {
-                        "document_id": doc_folder.name,
-                        "filename": original_file.name,
-                        "total_chunks": len(result["chunks"]),
-                    }
+                if not result or not result["chunks"]: continue
+
+                meta_file = doc_folder / "meta.json"
+                meta = json.loads(meta_file.read_text()) if meta_file.exists() else {
+                    "document_id": doc_folder.name,
+                    "filename": original_file.name,
+                    "file_type": file_type,
+                    "original_path": str(original_file),
+                }
+
+                # Same text as last time and its chunks are still indexed?
+                # Then leave the document (and the answer cache) alone.
+                stored = app.state.collection.get(where={"doc_id": doc_folder.name}, limit=1)
+                same_text = meta.get("text_hash") == result["text_hash"]
+                if same_text and stored["ids"]:
                     documents_metadata[doc_folder.name] = meta
-                    reindex_count += 1
+                    continue
+
+                # If we had a hash and it no longer matches, the content changed.
+                # No hash and no chunks means this is simply a new document.
+                content_changed = bool(meta.get("text_hash")) and not same_text
+
+                # Content changed (or the index was lost): replace its chunks.
+                if stored["ids"]:
+                    app.state.collection.delete(where={"doc_id": doc_folder.name})
+                ids = [f"{doc_folder.name}_{i}" for i in range(len(result["chunks"]))]
+                embs = app.state.encoder.encode(result["chunks"]).tolist()
+                app.state.collection.add(
+                    documents=result["chunks"],
+                    embeddings=embs,
+                    ids=ids,
+                    metadatas=[{"doc_id": doc_folder.name, "file": original_file.name}] * len(ids)
+                )
+                meta["text_hash"] = result["text_hash"]
+                meta["total_chunks"] = len(result["chunks"])
+                meta_file.write_text(json.dumps(meta, indent=2))
+                documents_metadata[doc_folder.name] = meta
+                if content_changed:
+                    changed_ids.add(doc_folder.name)
+                else:
+                    added_count += 1
             except Exception as e:
                 print(f"⚠️ Failed to re-index {doc_folder.name}: {e}")
-        if reindex_count > 0: print(f"🔄 Re-indexed {reindex_count} documents")
 
-    # 6. Answer cache: start empty, since documents may have changed while the app was off
-    semantic_cache.clear(app)
+        # Documents deleted outside the app: drop their leftover chunks.
+        try:
+            stored_docs = app.state.collection.get(
+                where={"doc_id": {"$ne": "seed"}}, include=["metadatas"]
+            )
+            indexed_ids = {
+                m.get("doc_id") for m in stored_docs["metadatas"] if m and m.get("doc_id")
+            }
+        except Exception:
+            indexed_ids = set()
+        on_disk = {p.name for p in docs_path.glob("*") if p.is_dir()}
+        for orphan in indexed_ids - on_disk:
+            try:
+                app.state.collection.delete(where={"doc_id": orphan})
+                changed_ids.add(orphan)
+                print(f"🗑️ Removed chunks for deleted document {orphan}")
+            except Exception as e:
+                print(f"⚠️ Failed to remove chunks for {orphan}: {e}")
+
+        if changed_ids:
+            print(f"🔄 {len(changed_ids)} document change(s) detected: forgetting their answers")
+        elif added_count:
+            print(f"➕ {added_count} new document(s) indexed: keeping cached answers")
+        else:
+            print("✅ Documents unchanged")
+
+    # 6. Answer cache: only discard answers that used an edited/deleted document.
+    app.state.cache = semantic_cache.open_cache(app.state.chroma)
+    if changed_ids:
+        semantic_cache.forget_documents(app.state.cache, changed_ids)
+    else:
+        print(f"♻️ Keeping answer cache ({app.state.cache.count()} cached answers)")
 
     print("🚀 Application startup complete")
     yield
@@ -177,10 +231,14 @@ async def chat(req: ChatRequest):
             where={"doc_id": {"$ne": "seed"}}
         )
         chunks = res["documents"][0] if res["documents"] else []
-        
+        # Which documents does this answer rest on? Stored with the cache entry
+        # so editing/deleting a document only invalidates the answers that used it.
+        metas = res.get("metadatas")[0] if res.get("metadatas") else []
+        doc_ids = {m["doc_id"] for m in metas if m and m.get("doc_id")}
+
         # 2. History & LLM
         answer = ask_llm(req.query, chunks)
-        semantic_cache.save(app.state.cache, emb, req.query, answer)
+        semantic_cache.save(app.state.cache, emb, req.query, answer, doc_ids)
 
         # 3. Save History
         thread_store[req.thread_id].append({"user": req.query, "bot": answer})
