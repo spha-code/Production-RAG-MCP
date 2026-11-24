@@ -48,6 +48,7 @@ $env:PYTHONUTF8 = "1"; uv run python -m backend.app
 docker compose up -d --build
 ```
 
+API docs are also published at http://127.0.0.1:8000/docs (localhost only).
 The web UI (`web/`) calls the backend through nginx at `/api/...`, so opening `web/index.html` directly won't work.
 
 ## API
