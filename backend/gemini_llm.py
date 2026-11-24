@@ -71,9 +71,17 @@ def select_chunks(chunks: list[str], max_tokens: int = 900) -> list[str]:
     return out
 
 
-def build_context(chunks: list[str], max_tokens: int = 900) -> str:
+def build_context(
+    chunks: list[str], max_tokens: int = 900, files: list[str] | None = None
+) -> str:
+    """Label each excerpt with the file it came from, so the model can cite it
+    and doesn't mistake an excerpt for a whole document."""
+    source = {}
+    for chunk, file in zip(chunks, files or []):
+        source.setdefault(chunk.strip(), file)
     return "\n\n".join(
-        f"[DOC {i}]\n{c}" for i, c in enumerate(select_chunks(chunks, max_tokens), 1)
+        f"[Excerpt {i} from {source.get(c) or 'an uploaded document'}]\n{c}"
+        for i, c in enumerate(select_chunks(chunks, max_tokens), 1)
     )
 
 # ============================================================
@@ -155,20 +163,26 @@ def call_gemini(
 # ============================================================
 # MAIN ENTRY (AUTO RAG / LLM)
 # ============================================================
-def ask_llm(question: str, chunks: list[str] | None = None) -> str:
+def ask_llm(
+    question: str, chunks: list[str] | None = None, files: list[str] | None = None
+) -> str:
     if not question.strip():
         return "Please ask a question."
 
     chunks = chunks or []
-    context = build_context(chunks)
+    context = build_context(chunks, files=files)
     relevant = bool(context) and is_relevant(question, chunks)
     max_out = choose_max_tokens(question)
     if relevant:
         system_prompt = f"""
 You are a retrieval-augmented assistant.
 
+The <context> holds excerpts retrieved from the user's uploaded documents,
+not the whole documents. Each excerpt is labelled with its file name.
+
 RULES:
 - Use ONLY the information inside <context>.
+- When you cite, name the file, not the excerpt number.
 - If the answer is not present, say:
   "I don’t know based on the provided documents."
 - Do NOT guess.

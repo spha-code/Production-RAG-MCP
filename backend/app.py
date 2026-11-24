@@ -8,6 +8,7 @@ from sentence_transformers import SentenceTransformer
 from datetime import datetime
 import pathlib
 import json
+import re
 from collections import defaultdict
 
 # Module-style imports for Docker compatibility
@@ -16,6 +17,39 @@ from backend import semantic_cache
 from backend.routes.upload import process_document_sync, documents_metadata
 
 thread_store = defaultdict(list)   # thread_id -> list[dict]
+
+# Chunks further than this (cosine distance) are not sent to the model.
+# Measured on the 2026 dyslipidemia guideline: real questions about it scored
+# 0.30-0.37, unrelated ones ("capital of Japan", "hi", "do you have any
+# documents?") 0.75+. Vector search always returns *something*; without this
+# cutoff Gemini would be handed irrelevant excerpts and answer from them.
+RETRIEVAL_MAX_DISTANCE = 0.60
+
+# Questions about the collection itself ("which documents do you have?") are
+# answered from the document list, not from RAG: the chunks can't know which
+# files exist. Patterns are kept narrow so content questions like "which
+# documents mention statins?" still go to RAG.
+_DOC = r"(documents?|files?|docs|pdfs?)"
+LIBRARY_PATTERNS = [
+    rf"\b(do you have|are there|have you got) any {_DOC}\b",
+    rf"\b(what|which) {_DOC} (do you have|have you got|are (there|stored|uploaded|available)|did i upload)\b",
+    rf"\b(list|show)( me)?( all)?( (my|the|your))? {_DOC}\b",
+    rf"\bhow many {_DOC}\b",
+    r"\bwhat('s| is) in (my|your|the) (documents|library)\b",
+]
+
+
+def is_library_question(question: str) -> bool:
+    q = question.lower()
+    return any(re.search(p, q) for p in LIBRARY_PATTERNS)
+
+
+def library_answer() -> str:
+    docs = list(documents_metadata.values())
+    if not docs:
+        return "No documents are uploaded yet. Upload a file to ask questions about it."
+    lines = [f"• {d.get('filename', '?')} ({d.get('total_chunks', '?')} chunks)" for d in docs]
+    return f"{len(docs)} document(s) stored:\n" + "\n".join(lines)
 
 # ---------- import upload router ----------
 print("=== DEBUG: Starting app setup ===")
@@ -42,7 +76,7 @@ class Source(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
-    mode: str = "general"          # "rag" when document chunks were sent to the model
+    mode: str = "general"          # "rag": chunks sent to the model; "library": answered from the document list
     sources: list[Source] = []     # the chunks the model was given, in order
     cached: bool = False           # answer replayed from the semantic cache
 
@@ -225,6 +259,13 @@ if upload_router:
 @app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     try:
+        # Questions about the collection itself: answer from the document list.
+        # Not cached, so uploads and deletes show up immediately.
+        if is_library_question(req.query):
+            answer = library_answer()
+            thread_store[req.thread_id].append({"user": req.query, "bot": answer})
+            return ChatResponse(answer=answer, mode="library")
+
         # 1. Retrieve
         emb = app.state.encoder.encode([req.query]).tolist()
 
@@ -248,6 +289,15 @@ async def chat(req: ChatRequest):
         chunks = res["documents"][0] if res.get("documents") else []
         metas = res["metadatas"][0] if res.get("metadatas") else []
         distances = res["distances"][0] if res.get("distances") else []
+
+        # Drop weak matches before anything else looks at them.
+        kept = [
+            (c, m, d) for c, m, d in zip(chunks, metas, distances)
+            if d is not None and d <= RETRIEVAL_MAX_DISTANCE
+        ]
+        chunks = [c for c, _, _ in kept]
+        metas = [m for _, m, _ in kept]
+        distances = [d for _, _, d in kept]
 
         # Did document chunks actually reach the model? "general" means Gemini
         # answered from its own knowledge, so no embedding influenced the answer.
@@ -283,7 +333,8 @@ async def chat(req: ChatRequest):
             )
 
         # 2. History & LLM
-        answer = ask_llm(req.query, chunks)
+        files = [str((m or {}).get("file", "")) for m in metas]
+        answer = ask_llm(req.query, chunks, files=files)
         semantic_cache.save(
             app.state.cache, emb, req.query, answer, doc_ids, mode,
             [s.model_dump() for s in sources],
