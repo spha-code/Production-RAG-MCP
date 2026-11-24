@@ -520,3 +520,40 @@ body {
     color: #007bff;
     font-style: italic;
 }
+
+/* Retrieval sources under bot answers */
+.message-sources {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed #e5e7f0;
+    font-size: 0.75rem;
+}
+
+.sources-label {
+    color: #999;
+    font-weight: 600;
+}
+
+.source-chip {
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #eef1ff;
+    color: #4a5bd4;
+    cursor: help;
+}
+
+.cache-badge {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #fff7e6;
+    color: #b26a00;
+    font-weight: 600;
+}
