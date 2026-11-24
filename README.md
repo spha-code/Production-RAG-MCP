@@ -74,11 +74,18 @@ documents/            Uploaded originals (source of truth)
 chroma/               Vector DB, generated, git-ignored
 web/                  Chat UI (HTML/JS/CSS)
 deploy/               nginx configs (local and Docker)
-tests/                pytest tests
+tests/                pytest tests (run in a temp folder)
 test_docs/            Sample files to upload
 ```
 
-## Known issues
+## Tests
 
-- **Tests don't run.** `tests/conftest.py` imports `app` instead of `backend.app`, and some assertions expect old `/health` fields.
-- **Not implemented yet** despite the name: an MCP endpoint and bulk folder upload.
+```bash
+uv run pytest
+```
+
+Each test runs the real app in a temporary folder, so your `chroma/` and `documents/` are never touched. Gemini is mocked, so no API key or network is needed.
+
+## Not implemented yet
+
+Despite the name: an MCP endpoint and bulk folder upload.

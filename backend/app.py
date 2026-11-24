@@ -49,7 +49,9 @@ async def lifespan(app: FastAPI):
     print("✅ SentenceTransformer loaded")
     
     # 2. Initialize ChromaDB
-    app.state.chroma = chromadb.PersistentClient(path="./chroma")
+    # Absolute path: Chroma caches clients per path string, so a relative
+    # "./chroma" would keep pointing at the first folder it was opened in.
+    app.state.chroma = chromadb.PersistentClient(path=str(pathlib.Path("chroma").resolve()))
     
     # 3. Get or create collection
     try:
