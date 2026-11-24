@@ -11,7 +11,7 @@ import json
 from collections import defaultdict
 
 # Module-style imports for Docker compatibility
-from backend.gemini_llm import ask_llm
+from backend.gemini_llm import ask_llm, retrieval_mode, select_chunks
 from backend import semantic_cache
 from backend.routes.upload import process_document_sync, documents_metadata
 
@@ -34,8 +34,17 @@ class ChatRequest(BaseModel):
     k: int = 3
     thread_id: str = "default"
 
+class Source(BaseModel):
+    doc_id: str
+    file: str = ""
+    chunk: str
+    distance: float | None = None
+
 class ChatResponse(BaseModel):
     answer: str
+    mode: str = "general"          # "rag" when document chunks were sent to the model
+    sources: list[Source] = []     # the chunks the model was given, in order
+    cached: bool = False           # answer replayed from the semantic cache
 
 # ---------- lifespan: cold-start code ----------
 @asynccontextmanager
@@ -222,30 +231,70 @@ async def chat(req: ChatRequest):
         # 0. Semantic cache: reuse the answer to a question with the same meaning
         cached = semantic_cache.lookup(app.state.cache, emb)
         if cached is not None:
-            thread_store[req.thread_id].append({"user": req.query, "bot": cached})
-            return ChatResponse(answer=cached)
+            thread_store[req.thread_id].append({"user": req.query, "bot": cached["answer"]})
+            return ChatResponse(
+                answer=cached["answer"],
+                mode=cached["mode"],
+                sources=[Source(**s) for s in cached["sources"]],
+                cached=True,
+            )
 
         res = app.state.collection.query(
             query_embeddings=emb,
             n_results=min(req.k, 5),
-            where={"doc_id": {"$ne": "seed"}}
+            where={"doc_id": {"$ne": "seed"}},
+            include=["documents", "metadatas", "distances"],
         )
-        chunks = res["documents"][0] if res["documents"] else []
+        chunks = res["documents"][0] if res.get("documents") else []
+        metas = res["metadatas"][0] if res.get("metadatas") else []
+        distances = res["distances"][0] if res.get("distances") else []
+
+        # Did document chunks actually reach the model? "general" means Gemini
+        # answered from its own knowledge, so no embedding influenced the answer.
+        mode = retrieval_mode(req.query, chunks)
+        sent = set(select_chunks(chunks)) if mode == "rag" else set()
+
+        sources: list[Source] = []
+        for chunk, meta, distance in zip(chunks, metas, distances):
+            if chunk.strip() not in sent:
+                continue
+            meta = meta or {}
+            sources.append(Source(
+                doc_id=str(meta.get("doc_id", "")),
+                file=str(meta.get("file", "")),
+                chunk=chunk[:300],
+                distance=round(float(distance), 4) if distance is not None else None,
+            ))
+
         # Which documents does this answer rest on? Stored with the cache entry
         # so editing/deleting a document only invalidates the answers that used it.
-        metas = res.get("metadatas")[0] if res.get("metadatas") else []
-        doc_ids = {m["doc_id"] for m in metas if m and m.get("doc_id")}
+        doc_ids = {s.doc_id for s in sources if s.doc_id}
+
+        # Level 1: server-side trace of what retrieval offered the model.
+        if sources:
+            detail = ", ".join(
+                f"{s.file or s.doc_id} (distance {s.distance})" for s in sources
+            )
+            print(f"🔎 Retrieval: mode=rag, {len(sources)} chunk(s) sent: {detail}")
+        else:
+            print(
+                f"🔎 Retrieval: mode={mode}, {len(chunks)} chunk(s) retrieved, "
+                f"0 sent to the model"
+            )
 
         # 2. History & LLM
         answer = ask_llm(req.query, chunks)
-        semantic_cache.save(app.state.cache, emb, req.query, answer, doc_ids)
+        semantic_cache.save(
+            app.state.cache, emb, req.query, answer, doc_ids, mode,
+            [s.model_dump() for s in sources],
+        )
 
         # 3. Save History
         thread_store[req.thread_id].append({"user": req.query, "bot": answer})
         if len(thread_store[req.thread_id]) > 20:
             thread_store[req.thread_id] = thread_store[req.thread_id][-20:]
             
-        return ChatResponse(answer=answer)
+        return ChatResponse(answer=answer, mode=mode, sources=sources)
     except Exception as e:
         print(f"❌ CHAT ERROR: {e}")
         return ChatResponse(answer="💬 I encountered an error. Please check backend logs.")

@@ -139,10 +139,16 @@ async function sendMessage() {
         }
 
         const data = await res.json();
-        const elapsed = Date.now() - startTime;
 
-        recordResponseTime(elapsed);
-        addChatMessage(data.answer || "No response received.", 'bot', 'auto', elapsed);
+        recordResponseTime(Date.now() - startTime);
+        addChatMessage(
+            data.answer || "No response received.",
+            'bot',
+            data.mode || 'general',
+            Date.now() - startTime,
+            data.sources || [],
+            Boolean(data.cached)
+        );
 
     } catch (err) {
         addChatMessage("❌ Backend connection error.", 'bot', 'system');
@@ -156,7 +162,7 @@ async function sendMessage() {
 }
 
 // ========== UI RENDERING ==========
-function addChatMessage(text, sender, mode = 'gen', responseTime = null) {
+function addChatMessage(text, sender, mode = 'general', responseTime = null, sources = [], cached = false) {
     const container = document.getElementById('chatMessages');
     const msgDiv = document.createElement('div');
     msgDiv.className = `message message-${sender}`;
@@ -164,23 +170,13 @@ function addChatMessage(text, sender, mode = 'gen', responseTime = null) {
     const contentDiv = document.createElement('div');
     contentDiv.className = 'message-content';
 
-    let cleanText = text.trim();
-    let detectedMode = mode;
-
-    // Detect RAG vs General mode from prefix emojis
-    if (cleanText.startsWith('📄')) {
-        detectedMode = 'doc';
-        cleanText = cleanText.replace(/^📄\s*/, '');
-    } else if (cleanText.startsWith('💬')) {
-        detectedMode = 'gen';
-        cleanText = cleanText.replace(/^💬\s*/, '');
-    }
+    const cleanText = text.trim();
 
     if (sender === 'bot') {
-        updateChatModeIndicator(detectedMode);
+        updateChatModeIndicator(mode);
         const icon = document.createElement('span');
-        icon.className = `mode-indicator mode-${detectedMode}`;
-        icon.textContent = detectedMode === 'doc' ? '📄' : '💬';
+        icon.className = `mode-indicator mode-${mode === 'rag' ? 'doc' : 'gen'}`;
+        icon.textContent = mode === 'rag' ? '📄' : '💬';
         contentDiv.appendChild(icon);
     }
 
@@ -188,6 +184,10 @@ function addChatMessage(text, sender, mode = 'gen', responseTime = null) {
     textSpan.className = 'unicode-safe';
     textSpan.textContent = cleanText; // Safe from XSS
     contentDiv.appendChild(textSpan);
+
+    if (sender === 'bot' && (sources.length || cached)) {
+        contentDiv.appendChild(buildSources(sources, cached));
+    }
 
     if (responseTime) {
         const timeDiv = document.createElement('div');
@@ -201,12 +201,45 @@ function addChatMessage(text, sender, mode = 'gen', responseTime = null) {
     container.scrollTop = container.scrollHeight;
 }
 
+function buildSources(sources, cached) {
+    const wrap = document.createElement('div');
+    wrap.className = 'message-sources';
+
+    if (sources.length) {
+        const label = document.createElement('span');
+        label.className = 'sources-label';
+        label.textContent = 'Sources:';
+        wrap.appendChild(label);
+
+        sources.forEach((source) => {
+            const chip = document.createElement('span');
+            chip.className = 'source-chip';
+            const name = source.file || source.doc_id || 'document';
+            const distance = typeof source.distance === 'number'
+                ? ` · ${source.distance.toFixed(3)}`
+                : '';
+            chip.textContent = `${name}${distance}`;
+            if (source.chunk) chip.title = source.chunk;
+            wrap.appendChild(chip);
+        });
+    }
+
+    if (cached) {
+        const badge = document.createElement('span');
+        badge.className = 'cache-badge';
+        badge.textContent = '⚡ cached';
+        wrap.appendChild(badge);
+    }
+
+    return wrap;
+}
+
 function updateChatModeIndicator(mode) {
     const el = document.getElementById('chatModeIndicator');
-    if (el) {
-        el.className = `mode-indicator mode-${mode}`;
-        el.textContent = mode === 'doc' ? '📄 Document Mode' : '💬 General Mode';
-    }
+    if (!el) return;
+    const isRag = mode === 'rag';
+    el.className = `mode-indicator ${isRag ? 'mode-doc' : 'mode-gen'}`;
+    el.textContent = isRag ? '📄 Document Mode' : '💬 General Mode';
 }
 
 function recordResponseTime(ms) {

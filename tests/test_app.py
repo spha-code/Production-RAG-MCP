@@ -62,6 +62,59 @@ def test_chat_errors_are_not_cached(client, mock_llm):
     assert mock_llm.call_count == 2
 
 
+def test_chat_reports_sources_when_documents_are_used(client, mock_llm):
+    client.post(
+        "/upload/",
+        files={
+            "file": (
+                "ibuprofen.txt",
+                io.BytesIO(b"Ibuprofen adult dose is 200-400 mg every 4 to 6 hours."),
+                "text/plain",
+            )
+        },
+        data={"chunk_size": 500, "chunk_overlap": 50},
+    )
+    data = client.post("/chat", json={"query": "What is the ibuprofen dose?", "k": 1}).json()
+
+    assert data["mode"] == "rag"
+    assert data["cached"] is False
+    assert len(data["sources"]) == 1
+    source = data["sources"][0]
+    assert source["file"] == "ibuprofen.txt"
+    assert "Ibuprofen" in source["chunk"]
+    assert isinstance(source["distance"], float)
+
+
+def test_chat_reports_general_mode_without_documents(client, mock_llm):
+    data = client.post("/chat", json={"query": "What is the capital of France?"}).json()
+
+    assert data["mode"] == "general"
+    assert data["sources"] == []
+    assert data["cached"] is False
+
+
+def test_cache_hit_replays_mode_and_sources(client, mock_llm):
+    client.post(
+        "/upload/",
+        files={
+            "file": (
+                "ibuprofen.txt",
+                io.BytesIO(b"Ibuprofen adult dose is 200-400 mg every 4 to 6 hours."),
+                "text/plain",
+            )
+        },
+        data={"chunk_size": 500, "chunk_overlap": 50},
+    )
+    question = "What is the ibuprofen dose?"
+    first = client.post("/chat", json={"query": question, "k": 1}).json()
+    second = client.post("/chat", json={"query": question, "k": 1}).json()
+
+    assert second["cached"] is True
+    assert second["mode"] == first["mode"] == "rag"
+    assert second["sources"] == first["sources"]
+    mock_llm.assert_called_once()
+
+
 def test_document_info_empty(client):
     response = client.get("/chat/documents/info")
     assert response.status_code == 200

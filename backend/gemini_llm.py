@@ -46,15 +46,16 @@ def choose_max_tokens(question: str) -> int:
 # ============================================================
 # CONTEXT BUILDER (RAG)
 # ============================================================
-def build_context(chunks: list[str], max_tokens: int = 900) -> str:
+def select_chunks(chunks: list[str], max_tokens: int = 900) -> list[str]:
+    """Deduplicate chunks and keep the ones that fit in the context budget."""
     if not chunks:
-        return ""
+        return []
 
     seen = set()
     used = 0
     out = []
 
-    for i, c in enumerate(chunks, 1):
+    for c in chunks:
         c = c.strip()
         if not c or c in seen:
             continue
@@ -64,10 +65,16 @@ def build_context(chunks: list[str], max_tokens: int = 900) -> str:
         if used + t > max_tokens:
             break
 
-        out.append(f"[DOC {i}]\n{c}")
+        out.append(c)
         used += t
 
-    return "\n\n".join(out)
+    return out
+
+
+def build_context(chunks: list[str], max_tokens: int = 900) -> str:
+    return "\n\n".join(
+        f"[DOC {i}]\n{c}" for i, c in enumerate(select_chunks(chunks, max_tokens), 1)
+    )
 
 # ============================================================
 # RELEVANCE HEURISTIC
@@ -95,6 +102,12 @@ def is_relevant(question: str, chunks: list[str], min_hits: int = 1) -> bool:
             return True
 
     return False
+
+
+def retrieval_mode(question: str, chunks: list[str]) -> str:
+    """"rag" when document chunks are sent to the model, "general" otherwise."""
+    context = build_context(chunks)
+    return "rag" if context and is_relevant(question, chunks) else "general"
 
 # ============================================================
 # GEMINI CALL
@@ -150,7 +163,6 @@ def ask_llm(question: str, chunks: list[str] | None = None) -> str:
     context = build_context(chunks)
     relevant = bool(context) and is_relevant(question, chunks)
     max_out = choose_max_tokens(question)
-
     if relevant:
         system_prompt = f"""
 You are a retrieval-augmented assistant.

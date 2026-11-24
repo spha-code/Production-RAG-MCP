@@ -4,6 +4,7 @@
 # next to (but separate from) the "docs" collection. Before calling the LLM,
 # /chat looks for a past question close enough in meaning and returns its
 # saved answer instead.
+import json
 import uuid
 from datetime import datetime, UTC
 
@@ -22,8 +23,8 @@ def open_cache(chroma_client):
     )
 
 
-def lookup(cache, embedding: list[list[float]]) -> str | None:
-    """Return the saved answer for the closest past question, or None."""
+def lookup(cache, embedding: list[list[float]]) -> dict | None:
+    """Return the saved answer (plus its mode and sources), or None."""
     if cache.count() == 0:
         return None
     hit = cache.query(query_embeddings=embedding, n_results=1)
@@ -32,8 +33,17 @@ def lookup(cache, embedding: list[list[float]]) -> str | None:
     distance = hit["distances"][0][0]
     if distance > CACHE_MAX_DISTANCE:
         return None
+    meta = hit["metadatas"][0][0] or {}
     print(f"⚡ Cache hit (distance {distance:.3f}): {hit['documents'][0][0]!r}")
-    return hit["metadatas"][0][0]["answer"]
+    try:
+        sources = json.loads(meta.get("sources") or "[]")
+    except (TypeError, ValueError):
+        sources = []
+    return {
+        "answer": meta.get("answer", ""),
+        "mode": meta.get("mode", "general"),
+        "sources": sources,
+    }
 
 
 def save(
@@ -42,15 +52,19 @@ def save(
     question: str,
     answer: str,
     doc_ids=(),
+    mode: str = "general",
+    sources=None,
 ) -> None:
     """Store a question and its answer, remembering which documents it used.
 
     Errors are never cached. `doc_ids` lets an edit or delete discard only the
     answers that actually relied on a document, instead of the whole cache.
+    `mode` and `sources` are replayed on a cache hit so the UI can still show
+    where the answer came from.
     """
     if not answer or answer.startswith("❌") or "not configured" in answer:
         return
-    sources = ",".join(sorted({d for d in doc_ids if d}))
+    doc_id_list = ",".join(sorted({d for d in doc_ids if d}))
     cache.add(
         ids=[str(uuid.uuid4())],
         embeddings=embedding,
@@ -58,7 +72,9 @@ def save(
         metadatas=[{
             "answer": answer,
             "created": datetime.now(UTC).isoformat(),
-            "doc_ids": sources,
+            "doc_ids": doc_id_list,
+            "mode": mode,
+            "sources": json.dumps(sources or [], ensure_ascii=False),
         }],
     )
 
