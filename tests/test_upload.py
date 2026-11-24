@@ -28,11 +28,19 @@ def test_upload_is_searchable_immediately(client, mock_llm):
     assert any("Ibuprofen" in c for c in chunks)
 
 
-def test_upload_clears_cache(client, mock_llm):
+def test_upload_keeps_cache(client, mock_llm):
     client.post("/chat", json={"query": "What is the ibuprofen dose?"})
     upload(client)
     client.post("/chat", json={"query": "What is the ibuprofen dose?"})
-    assert mock_llm.call_count == 2  # new document, so no stale cached answer
+    assert mock_llm.call_count == 1  # adding a document leaves cached answers alone
+
+
+def test_delete_forgets_only_that_documents_cached_answers(client, mock_llm):
+    doc_id = upload(client).json()["document_id"]
+    client.post("/chat", json={"query": "What is the ibuprofen dose?", "k": 1})
+    client.delete(f"/upload/documents/{doc_id}")
+    client.post("/chat", json={"query": "What is the ibuprofen dose?", "k": 1})
+    assert mock_llm.call_count == 2  # the answer that used the deleted document is gone
 
 
 def test_list_and_delete_document(client):

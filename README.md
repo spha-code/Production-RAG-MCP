@@ -8,9 +8,9 @@ FastAPI backend, ChromaDB vector store, local Sentence-Transformers embeddings, 
 1. **Upload**: a file (PDF, DOCX, TXT, MD, CSV) is saved to `documents/`, split into ~1,000-character chunks (200 overlap), and each chunk is embedded locally with `all-MiniLM-L6-v2` (384 numbers per chunk) into Chroma (`chroma/`).
 2. **Ask**: the question is embedded the same way and Chroma returns the closest chunks.
 3. **Answer**: the chunks and the question go to Gemini, which answers only from them (or answers normally if no chunk is relevant).
-4. **Cache**: answers are cached by meaning. A rephrased question (cosine distance ≤ 0.20) gets the saved answer without calling Gemini. The cache is cleared on startup and whenever documents change.
+4. **Cache**: answers are cached by meaning. A rephrased question (cosine distance ≤ 0.20) gets the saved answer without calling Gemini. Each entry records which documents it used, so the cache survives restarts and new uploads, and editing or deleting a document discards only the answers built from it.
 
-`chroma/` is generated: it's rebuilt from `documents/` on every startup and is not committed.
+`chroma/` is generated and git-ignored, so the cache is never committed. On startup only documents whose content changed are re-indexed.
 
 ## Setup
 

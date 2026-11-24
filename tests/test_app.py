@@ -1,4 +1,10 @@
 # tests/test_app.py
+import io
+
+from fastapi.testclient import TestClient
+
+from backend.app import app, thread_store
+from backend.routes.upload import documents_metadata
 
 
 def test_health_check(client):
@@ -65,3 +71,80 @@ def test_document_info_empty(client):
 def test_chat_validation_error(client):
     response = client.post("/chat", json={})
     assert response.status_code == 422
+
+
+def test_restart_keeps_cache_when_documents_unchanged(tmp_path, monkeypatch, mock_llm):
+    """Restarting with the same documents must not throw cached answers away."""
+    monkeypatch.chdir(tmp_path)
+    documents_metadata.clear()
+    thread_store.clear()
+
+    with TestClient(app) as first:
+        first.post("/chat", json={"query": "What is the capital of France?"})
+    assert mock_llm.call_count == 1
+
+    mock_llm.reset_mock()
+    with TestClient(app) as second:
+        response = second.post("/chat", json={"query": "What's France's capital city?"})
+
+    assert response.json()["answer"] == "Mocked Gemini Response"
+    mock_llm.assert_not_called()  # answered from the cache that survived the restart
+
+
+def test_restart_keeps_cache_when_a_document_was_added(tmp_path, monkeypatch, mock_llm):
+    """A document added while the app was off must not discard cached answers."""
+    monkeypatch.chdir(tmp_path)
+    documents_metadata.clear()
+    thread_store.clear()
+
+    with TestClient(app) as first:
+        first.post("/chat", json={"query": "What is the capital of France?"})
+    assert mock_llm.call_count == 1
+
+    doc_dir = tmp_path / "documents" / "added-offline"
+    doc_dir.mkdir(parents=True)
+    (doc_dir / "original.txt").write_text("Ibuprofen dose is 200-400 mg.")
+
+    mock_llm.reset_mock()
+    with TestClient(app) as second:
+        response = second.post("/chat", json={"query": "What's France's capital city?"})
+
+    assert response.json()["answer"] == "Mocked Gemini Response"
+    mock_llm.assert_not_called()  # still answered from the cache
+
+
+def test_restart_forgets_only_answers_that_used_the_changed_document(tmp_path, monkeypatch, mock_llm):
+    """Editing one document must leave the other documents' cached answers alone."""
+    monkeypatch.chdir(tmp_path)
+    documents_metadata.clear()
+    thread_store.clear()
+
+    with TestClient(app) as first:
+        def upload(name, text):
+            return first.post(
+                "/upload/",
+                files={"file": (name, io.BytesIO(text.encode()), "text/plain")},
+                data={"chunk_size": 500, "chunk_overlap": 50},
+            ).json()["document_id"]
+
+        ibuprofen_id = upload(
+            "ibuprofen.txt", "Ibuprofen adult dose is 200-400 mg every 4 to 6 hours."
+        )
+        upload("paracetamol.txt", "Paracetamol adult dose is 500-1000 mg every 4 to 6 hours.")
+        first.post("/chat", json={"query": "What is the ibuprofen dose?", "k": 1})
+        first.post("/chat", json={"query": "What is the paracetamol dose?", "k": 1})
+    assert mock_llm.call_count == 2
+
+    (tmp_path / "documents" / ibuprofen_id / "original.txt").write_text(
+        "Ibuprofen adult dose is now 800 mg every 8 hours."
+    )
+
+    mock_llm.reset_mock()
+    mock_llm.return_value = "Updated ibuprofen answer"
+    with TestClient(app) as second:
+        ibuprofen = second.post("/chat", json={"query": "What is the ibuprofen dose?", "k": 1})
+        paracetamol = second.post("/chat", json={"query": "What is the paracetamol dose?", "k": 1})
+
+    assert ibuprofen.json()["answer"] == "Updated ibuprofen answer"  # stale, forgotten
+    assert paracetamol.json()["answer"] == "Mocked Gemini Response"  # still cached
+    assert mock_llm.call_count == 1

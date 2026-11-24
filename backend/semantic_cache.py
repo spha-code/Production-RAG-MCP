@@ -36,20 +36,59 @@ def lookup(cache, embedding: list[list[float]]) -> str | None:
     return hit["metadatas"][0][0]["answer"]
 
 
-def save(cache, embedding: list[list[float]], question: str, answer: str) -> None:
-    """Store a question and its answer. Errors are never cached."""
+def save(
+    cache,
+    embedding: list[list[float]],
+    question: str,
+    answer: str,
+    doc_ids=(),
+) -> None:
+    """Store a question and its answer, remembering which documents it used.
+
+    Errors are never cached. `doc_ids` lets an edit or delete discard only the
+    answers that actually relied on a document, instead of the whole cache.
+    """
     if not answer or answer.startswith("❌") or "not configured" in answer:
         return
+    sources = ",".join(sorted({d for d in doc_ids if d}))
     cache.add(
         ids=[str(uuid.uuid4())],
         embeddings=embedding,
         documents=[question],
-        metadatas=[{"answer": answer, "created": datetime.now(UTC).isoformat()}],
+        metadatas=[{
+            "answer": answer,
+            "created": datetime.now(UTC).isoformat(),
+            "doc_ids": sources,
+        }],
     )
 
 
+def forget_documents(cache, doc_ids) -> int:
+    """Delete cached answers that were built from any of `doc_ids`.
+
+    Entries saved before source tracking existed have no "doc_ids" key. They
+    can't be attributed to a document, so they are treated as affected and
+    removed, which keeps stale answers out even for old cache entries.
+    """
+    doc_ids = {d for d in doc_ids if d}
+    if not doc_ids or cache.count() == 0:
+        return 0
+
+    entries = cache.get(include=["metadatas"])
+    stale = []
+    for entry_id, meta in zip(entries["ids"], entries["metadatas"]):
+        sources = (meta or {}).get("doc_ids")
+        if sources is None or set(filter(None, sources.split(","))) & doc_ids:
+            stale.append(entry_id)
+
+    if stale:
+        cache.delete(ids=stale)
+        print(f"🧹 Forgot {len(stale)} cached answer(s) for {', '.join(sorted(doc_ids))}")
+    return len(stale)
+
+
 def clear(app) -> None:
-    """Drop all cached answers, e.g. after documents change."""
+    """Drop all cached answers, e.g. for a full reset."""
     client = app.state.chroma
     try:
         client.delete_collection(CACHE_COLLECTION)
